@@ -1,0 +1,22 @@
+[project]
+name = "trabalho-1-panorama"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Beatriz Celante", email = "beatrizcelante@gmal.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "imageio>=2.31",
+    "numpy>=1.24",
+    "opencv-python>=4.5",
+    "rawpy>=0.19",
+]
+
+[project.scripts]
+trabalho-1-panorama = "trabalho_1_panorama:main"
+
+[build-system]
+requires = ["uv_build>=0.12.12,<0.13.0"]
+build-backend = "uv_build"
