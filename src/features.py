@@ -1,8 +1,8 @@
 """
-Etapa 2 - Deteccao e Extracao de Caracteristicas.
+Detecção e Extração de Características.
 
-Implementa deteccao de keypoints com SIFT, ORB ou AKAZE, e visualizacao com
-escala/orientacao (Figura 2 do enunciado).
+Implementa detecção de keypoints com SIFT e ORB, e visualização com
+escala/orientação
 """
 import os
 import cv2
@@ -20,14 +20,17 @@ def create_detector(method="SIFT"):
 
 def detect_features(image, method="SIFT"):
     """Retorna (keypoints, descriptors) para uma imagem BGR ou em tons de cinza."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
+    if image.ndim == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
     detector = create_detector(method)
     keypoints, descriptors = detector.detectAndCompute(gray, None)
     return keypoints, descriptors
 
 
 def detect_features_all(images, method="SIFT"):
-    """Aplica deteccao em uma lista de imagens. Retorna listas paralelas de kps e descritores."""
+    """Aplica detecção em uma lista de imagens. Retorna listas paralelas de kps e descritores."""
     all_kps, all_descs = [], []
     for img in images:
         kps, descs = detect_features(img, method)
@@ -37,7 +40,7 @@ def detect_features_all(images, method="SIFT"):
 
 
 def draw_keypoints(image, keypoints, out_path=None):
-    """Desenha keypoints com circulo (escala) e raio (orientacao)."""
+    """Desenha keypoints com círculo (escala) e raio (orientação)."""
     vis = cv2.drawKeypoints(
         image, keypoints, None,
         flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS,
@@ -48,7 +51,7 @@ def draw_keypoints(image, keypoints, out_path=None):
 
 
 def compare_detectors(image, methods=("SIFT", "ORB"), out_dir=None):
-    """Etapa 2.3 - compara detectores e retorna um resumo (nome -> numero de keypoints)."""
+    """Compara detectores (para somente uma imagem) e retorna um resumo (nome -> número de keypoints)."""
     summary = {}
     for m in methods:
         kps, _ = detect_features(image, m)

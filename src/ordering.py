@@ -1,10 +1,10 @@
 """
-Etapa 4 - Ordenacao Automatica das Imagens (obrigatoria, sem uso de EXIF).
+Ordenacao Automatica das Imagens.
 
-Constroi a matriz de conectividade a partir do numero de correspondencias
-inliers entre cada par de imagens (Figura 4), monta o grafo de vizinhanca e
-infere a sequencia de captura. Imagens sem conectividade suficiente (ex.:
-a imagem intrusa da Etapa 4.4) sao rejeitadas automaticamente.
+Constrói a matriz de conectividade a partir do número de correspondências
+inliers entre cada par de imagens, monta o grafo de vizinhanca e
+infere a sequencia de captura. Imagens sem conectividade suficiente
+são rejeitadas automaticamente.
 """
 import numpy as np
 import cv2

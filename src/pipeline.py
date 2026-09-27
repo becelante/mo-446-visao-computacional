@@ -5,16 +5,16 @@ Uso:
     python -m src.pipeline --input_dir fotos_png --output_dir resultados \
         --detector SIFT --ratio 0.75 --min_inliers 20
 
-Executa em sequencia todas as etapas obrigatorias do enunciado:
+Executa em sequência:
   1. Carrega as imagens (nomes embaralhados em memoria, sem uso de EXIF)
-  2. Detecao e extracao de caracteristicas (+ comparacao de detectores)
+  2. Detecção e extração de características (+ comparação de detectores)
   3. Emparelhamento com ratio test de Lowe
-  4. Ordenacao automatica via matriz de conectividade / grafo de vizinhanca,
+  4. Ordenação automática via matriz de conectividade / grafo de vizinhança,
      rejeitando imagens sem conectividade suficiente (intrusas)
-  5. Estimacao de homografia com RANSAC e composicao das transformacoes
-     par-a-par ate um referencial comum
-  6. Composicao do panorama com remocao de fantasmas (costura otima) e
-     feathering, comparado com a composicao ingenua
+  5. Estimação de homografia com RANSAC e composição das transformações
+     par-a-par até um referencial comum
+  6. Composição do panorama com remoção de fantasmas (costura otima) e
+     feathering, comparado com a composição ingenua
 """
 import argparse
 import os
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline de construcao de panoramas (Trabalho 1)")
     parser.add_argument("--input_dir", required=True, help="Pasta com as imagens (fora de ordem)")
     parser.add_argument("--output_dir", default="resultados")
-    parser.add_argument("--detector", default="SIFT", choices=["SIFT", "ORB", "AKAZE"])
+    parser.add_argument("--detector", default="SIFT", choices=["SIFT", "ORB""])
     parser.add_argument("--ratio", type=float, default=0.75, help="Limiar do ratio test de Lowe")
     parser.add_argument("--ransac_thresh", type=float, default=4.0)
     parser.add_argument("--min_matches", type=int, default=8)
