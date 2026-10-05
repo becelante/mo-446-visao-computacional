@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Dados grandes (o GitHub recusa arquivos > 100 MB): fotos RAW, fotos
+# reveladas e o panorama final de 16 bits
+A1/
+B1/
+C1/
+D1/
+*_png/
+*_results/6_panorama_final.png

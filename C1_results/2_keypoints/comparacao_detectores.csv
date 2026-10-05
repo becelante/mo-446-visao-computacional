@@ -1,0 +1,3 @@
+detector,keypoints,tempo_deteccao_s,matches_ratio_test,inliers,taxa_inliers,erro_reproj_px
+SIFT,40325,0.211,918,97,0.106,2.132
+ORB,4000,0.15,74,30,0.405,1.417

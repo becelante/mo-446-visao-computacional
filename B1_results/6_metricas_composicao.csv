@@ -1,0 +1,15 @@
+metrica,valor
+fotos_no_panorama,48
+intrusas_rejeitadas,0
+largura_px,30331
+altura_px,5300
+largura_angular_graus,360.0
+volta_completa_360,True
+ganho_min,0.9
+ganho_max,1.2
+vinheta_cantos_EV,-0.831
+diferenca_costura_antes_alinhamento,8.636
+diferenca_costura_depois_alinhamento,6.518
+erro_BA_mediana_pares_consecutivos_px,11.768
+focal_px,4827.37
+tempo_total_s,368

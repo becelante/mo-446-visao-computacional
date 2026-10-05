@@ -1,0 +1,9 @@
+par,imagem_1,imagem_2,matches_antes,matches_depois_ratio,inliers_ransac,taxa_inliers,erro_reproj_homografia_px,erro_BA_mediana_px,erro_BA_media_px
+0,x2l3zqmn.png,dcdffpga.png,55170,13150,9937,0.7557,2.643,3.185,3.919
+1,dcdffpga.png,wf8xvozc.png,50377,11077,7892,0.7125,3.069,5.909,5.743
+2,wf8xvozc.png,yldd9kev.png,53050,14190,11589,0.8167,3.484,4.035,4.616
+3,yldd9kev.png,3jxmp2sv.png,52488,10364,6200,0.5982,2.567,3.586,4.036
+4,3jxmp2sv.png,yu3n1nq2.png,49324,9647,6760,0.7007,3.352,3.457,3.738
+5,yu3n1nq2.png,7yhv8h5v.png,47517,10891,6433,0.5907,3.946,nan,nan
+6,7yhv8h5v.png,7eygpr6u.png,40390,22406,21947,0.9795,1.038,0.597,0.698
+7,7eygpr6u.png,gu34v866.png,43432,11498,8686,0.7554,3.969,5.34,5.268

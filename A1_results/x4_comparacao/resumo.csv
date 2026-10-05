@@ -1,0 +1,19 @@
+metodo,metrica,valor
+SIFT + ratio test (CPU),keypoints,7451.033
+SIFT + ratio test (CPU),matches,1754.017
+SIFT + ratio test (CPU),inliers,1515.833
+SIFT + ratio test (CPU),taxa_inliers,0.853
+SIFT + ratio test (CPU),erro_reproj_px,2.017
+SIFT + ratio test (CPU),tempo_s,0.507
+SuperPoint + LightGlue (GPU),keypoints,6358.3
+SuperPoint + LightGlue (GPU),matches,3396.333
+SuperPoint + LightGlue (GPU),inliers,2690.5
+SuperPoint + LightGlue (GPU),taxa_inliers,0.781
+SuperPoint + LightGlue (GPU),erro_reproj_px,3.477
+SuperPoint + LightGlue (GPU),tempo_s,0.487
+cv2.Stitcher (CPU),status,0
+cv2.Stitcher (CPU),fotos_entrada,62
+cv2.Stitcher (CPU),fotos_usadas,61
+cv2.Stitcher (CPU),tempo_s,35.8
+cv2.Stitcher (CPU),largura_px,5108
+cv2.Stitcher (CPU),altura_px,975
