@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Fotos (baixadas do Drive, ver README) e fotos reveladas
+/A1/
+/B1/
+/C1/
+/D1/
+/*_png/
+
+# Panoramas de 16 bits dos extras (o GitHub recusa arquivos > 100 MB)
+extras/*/6_composicao/panorama_final.png

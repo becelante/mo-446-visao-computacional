@@ -1,0 +1,3 @@
+metodo,keypoints,matches,inliers,taxa_inliers,erro_reproj_px,tempo_s
+SIFT + ratio test (CPU),7451.017,1754.333,1516.517,0.853,2.017,0.495
+SuperPoint + LightGlue (GPU),6358.267,3396.4,2683.467,0.779,3.472,0.472
