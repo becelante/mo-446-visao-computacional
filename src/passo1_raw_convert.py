@@ -4,10 +4,14 @@ de panoramas (as demais etapas trabalham com PNG/JPG via OpenCV).
 
 Todas as fotos de um conjunto sao reveladas com o mesmo balanco de branco
 (mediana do "as shot"; com AWB cada foto vem com um diferente) e o mesmo
-brilho, para nao criar degraus de cor e exposicao entre vizinhas.
+brilho, para nao criar degraus de cor e exposicao entre vizinhas. Com `anonymize`,
+as fotos recebem nomes aleatorios (Etapa 4.1), e os originais ficam em NAMES_FILE,
+usado so para rotular as saidas.
 """
+import csv
 import multiprocessing as mp
 import os
+import random
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -15,6 +19,7 @@ import rawpy
 import cv2
 
 SRGB_GAMMA = (2.4, 12.92)
+NAMES_FILE = "nomes_originais.csv"
 
 
 def common_white_balance(paths):
@@ -59,18 +64,24 @@ def _develop_one(path, out_path, user_wb, bright, max_dim, bits):
     return rgb.shape[1], rgb.shape[0]
 
 
-def convert_arw_to_png(input_dir, output_dir, max_dim=1600, bits=8, workers=None):
+def convert_arw_to_png(input_dir, output_dir, max_dim=1600, bits=8, anonymize=False, workers=None):
     arw_files = sorted(f for f in os.listdir(input_dir) if f.lower().endswith(".arw"))
     if not arw_files:
         print(f"Nenhum arquivo .ARW encontrado em {input_dir}")
         return []
     os.makedirs(output_dir, exist_ok=True)
     for old in os.listdir(output_dir):
-        if old.lower().endswith(".png"):
+        if old.lower().endswith(".png") or old == NAMES_FILE:
             os.remove(os.path.join(output_dir, old))
 
     paths = [os.path.join(input_dir, f) for f in arw_files]
-    out_paths = [os.path.join(output_dir, os.path.splitext(f)[0] + ".png") for f in arw_files]
+    stems = [os.path.splitext(f)[0] for f in arw_files]
+    if anonymize:
+        rng = random.Random(0)
+        stems = [f"{rng.getrandbits(32):08x}" for _ in arw_files]
+        with open(os.path.join(output_dir, NAMES_FILE), "w", newline="") as f:
+            csv.writer(f).writerows([("arquivo", "original")] + [(s + ".png", a) for s, a in zip(stems, arw_files)])
+    out_paths = [os.path.join(output_dir, s + ".png") for s in stems]
 
     user_wb = common_white_balance(paths)
     print(f"Balanco de branco comum (R, G, B, G2): {[round(v, 1) for v in user_wb]}")
@@ -83,3 +94,12 @@ def convert_arw_to_png(input_dir, output_dir, max_dim=1600, bits=8, workers=None
         for filename, out_path, (w, h) in zip(arw_files, out_paths, sizes):
             print(f"Convertido: {filename} -> {os.path.basename(out_path)}  ({w}x{h}, {bits} bits)")
     return out_paths
+
+
+def original_names(png_dir):
+    """{arquivo: nome original sem extensao} das fotos com nomes aleatorios; vazio se nao houver."""
+    path = os.path.join(png_dir, NAMES_FILE)
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return {row["arquivo"]: os.path.splitext(row["original"])[0] for row in csv.DictReader(f)}

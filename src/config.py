@@ -3,12 +3,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SEED = 0  # semente do embaralhamento da leitura (Etapa 4.1)
 
-# Passo 1: revelacao do RAW. (pasta com os .ARW, pasta de saida, lado maior em px (0 = total), bits)
+# Passo 1: revelacao do RAW. (pasta com os .ARW, pasta de saida, lado maior em px (0 = total), bits,
+# nomes aleatorios (Etapa 4.1, so no conjunto do pipeline principal))
 RAW_SETS = [
-    (ROOT / "D1", ROOT / "D1_png", 1600, 8),
-    (ROOT / "A1", ROOT / "A1_png", 0, 16),
-    (ROOT / "B1", ROOT / "B1_png", 0, 16),
-    (ROOT / "C1", ROOT / "C1_png", 0, 16),
+    (ROOT / "D1", ROOT / "D1_png", 1600, 8, True),
+    (ROOT / "A1", ROOT / "A1_png", 0, 16, False),
+    (ROOT / "B1", ROOT / "B1_png", 0, 16, False),
+    (ROOT / "C1", ROOT / "C1_png", 0, 16, False),
 ]
 
 DETECTOR = "SIFT"

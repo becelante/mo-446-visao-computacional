@@ -64,10 +64,10 @@ def draw_keypoints(image, keypoints, out_path=None):
     return vis
 
 
-def compare_detectors(img_a, img_b, methods=("SIFT", "ORB"), out_dir=None, ransac_thresh=4.0):
+def compare_detectors(img_a, img_b, methods=("SIFT", "ORB"), out_dir=None, ransac_thresh=4.0, name="keypoints"):
     """Etapa 2.3 - roda cada detector num par de imagens vizinhas e mede keypoints,
     matches apos o ratio test, inliers do RANSAC e erro de reprojecao. Salva os
-    keypoints de cada detector sobre img_a. Retorna uma linha por detector."""
+    keypoints de cada detector sobre img_a, em <name>_<detector>.jpg. Retorna uma linha por detector."""
     from .etapa3_matching import knn_match, match_features
     from .etapa5_homography import estimate_homography
 
@@ -83,5 +83,5 @@ def compare_detectors(img_a, img_b, methods=("SIFT", "ORB"), out_dir=None, ransa
                      "erro_reproj_px": round(metrics["mean_reproj_error"] or float("nan"), 3)})
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
-            draw_keypoints(img_a, kps_a, os.path.join(out_dir, f"keypoints_{m}.jpg"))
+            draw_keypoints(img_a, kps_a, os.path.join(out_dir, f"{name}_{m}.jpg"))
     return rows

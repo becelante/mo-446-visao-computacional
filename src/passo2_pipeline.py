@@ -22,12 +22,13 @@ import cv2
 import numpy as np
 
 from . import config
-from .etapa2_features import detect_features_all, compare_detectors
+from .etapa2_features import detect_features_all, compare_detectors, draw_keypoints
 from .etapa3_matching import knn_match, match_features, draw_matches_before_after
 from .etapa4_ordering import (build_connectivity_matrix, build_neighbor_graph, detect_intruders, infer_order,
                        draw_neighbor_graph)
 from .etapa5_homography import estimate_homography, compose_pairwise_homographies
 from .etapa6_blending import compose_panorama, ghost_comparison, overlap_metrics
+from .passo1_raw_convert import original_names
 
 
 def load_images(input_dir, shuffle=True, seed=0):
@@ -72,14 +73,16 @@ def run_pipeline(input_dir, output_dir):
 
     # ---- Etapa 1: carregamento ----
     images, filenames = load_images(input_dir, seed=config.SEED)
-    names = [os.path.splitext(f)[0] for f in filenames]
+    labels = original_names(input_dir)  # so para rotular as saidas; a ordenacao usa apenas os indices
+    names = [labels.get(f, os.path.splitext(f)[0]) for f in filenames]
     if len(images) < 6:
         print(f"Aviso: o enunciado pede no minimo 6 imagens; foram carregadas {len(images)}.")
 
     # ---- Etapa 2: deteccao de caracteristicas ----
     print("\n[Etapa 2] Detectando caracteristicas...")
     all_kps, all_descs = detect_features_all(images, method=detector)
-    for name, kps in zip(names, all_kps):
+    for name, img, kps in zip(names, images, all_kps):
+        draw_keypoints(img, kps, out("2_deteccao", f"{name}_{detector}.jpg"))
         print(f"  {name}: {len(kps)} keypoints")
 
     # ---- Etapa 4 (usa Etapa 3 internamente): matriz de conectividade + ordenacao ----
@@ -110,7 +113,7 @@ def run_pipeline(input_dir, output_dir):
     a, b = order[len(order) // 2 - 1], order[len(order) // 2]
     print(f"\n[Etapa 2.3] Comparando detectores no par ({names[a]}, {names[b]})...")
     rows = compare_detectors(images[a], images[b], config.DETECTORS_COMPARED, os.path.join(output_dir, "2_deteccao"),
-                             ransac_thresh=ransac_thresh)
+                             ransac_thresh=ransac_thresh, name=names[a])
     write_csv(out("2_deteccao", "comparacao_detectores.csv"), rows)
     for row in rows:
         print(f"  {row}")
