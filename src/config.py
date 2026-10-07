@@ -51,6 +51,9 @@ EXTRAS = [
     _extra("C1", "cylindrical", HIGH_PARALLAX, beta=0.05),
 ]
 
-# Passo 4: extra X4
+# Passo 4: extra X4. SIFT x LightGlue nos pares do X4_DATASET; cv2.Stitcher x LightGlue no D1
 X4_DATASET = "A1"
-X4_RESULTS = ROOT / "extras" / "x4" / "sift_vs_lightglue.csv"
+X4_RESULTS = ROOT / "extras" / "x4"
+X4_SEEDS = 10             # o emparelhador do cv2.Stitcher e aleatorio: as metricas usam todas as sementes
+X4_FIGURE_SEED = 6        # semente dos panoramas e detalhes salvos
+X4_DETAIL_ANCHOR = ("DSC03739", (806.0, 165.0))  # (foto, pixel) no centro do recorte: topo da coluna

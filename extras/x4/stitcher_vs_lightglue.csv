@@ -1,0 +1,3 @@
+metodo,inliers,erro_alinhamento_px,erro_min_px,erro_max_px
+cv2.Stitcher (ORB),228.8,0.735,0.691,0.845
+SuperPoint + LightGlue (GPU),2053.6,2.695,2.695,2.695
