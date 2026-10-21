@@ -5,9 +5,19 @@ build/
 dist/
 wheels/
 *.egg-info
+.ipynb_checkpoints/
 
 # Virtual environments
 .venv
+venv/
+.env
+
+# Editores e sistema operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # Fotos (baixadas do Drive, ver README) e fotos reveladas
 /A1/
@@ -15,6 +25,17 @@ wheels/
 /C1/
 /D1/
 /*_png/
+/Trabalho */[A-D]1/
+/Trabalho */*_png/
+
+# Fotos RAW soltas
+*.arw
+*.ARW
+*.dng
+*.DNG
 
 # Panoramas de 16 bits dos extras (o GitHub recusa arquivos > 100 MB)
-extras/*/6_composicao/panorama_final.png
+**/extras/*/6_composicao/panorama_final.png
+
+# Arquivos compactados (cópias antigas do código, ex.: panorama_pipeline.zip)
+*.zip
