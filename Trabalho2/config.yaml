@@ -1,0 +1,75 @@
+# Configuracao do pipeline - Variante A (ambiente interno)
+# Valores em metros, exceto as medidas reais (cm).
+
+video:
+  target_overlap: 0.80     # sobreposicao desejada entre quadros-chave vizinhos (0.6-0.8 no enunciado)
+  min_frames: 100          # a sobreposicao e ajustada para o numero de quadros ficar nesta faixa
+  max_frames: 300
+  max_dim: 1920            # maior lado dos quadros salvos (px)
+  blur_rel_thresh: 0.5     # descarta quadros com nitidez < 50% da mediana local
+  max_gap_s: 2.0           # nunca passa mais que isso sem um quadro-chave
+
+camera:
+  model: SIMPLE_RADIAL     # OPENCV se a lente for grande-angular (0.5x) com distorcao forte
+  focal_px: 1532           # foco em px, se conhecido (ex.: calibracao com tabuleiro); null = COLMAP estima
+                           # 1532 = estimado pelo COLMAP no C.MTS; o mapeador global precisa desse chute inicial
+
+sfm:
+  matching: exhaustive     # exhaustive | sequential (exaustivo: ~15 min na GPU com colmap.exe; horas na CPU)
+  sequential_overlap: 15   # vizinhos no tempo (modo sequencial)
+  loop_detection: true     # so no modo sequencial (vocabulary tree, baixado automaticamente)
+  vocab_tree: null         # null = arvore oficial do COLMAP; ou caminho local do .bin
+  max_image_size: 1600
+  max_num_features: 8192
+  mapper: global           # incremental | global (GLOMAP: registra muito mais quadros em paredes lisas)
+  sift_peak_threshold: 0.002 # limiar de contraste do SIFT (padrao COLMAP 0.0067); menor = mais pontos em paredes lisas
+  clahe: false             # extrai SIFT de copias com contraste local equalizado (cores/escala usam as originais)
+  use_gpu: auto            # auto | true | false
+  colmap_exe: auto         # colmap.exe com CUDA (SIFT/matching/mapeamento/PatchMatch na GPU); auto = ferramentas/colmap
+                           # ou o colmap do PATH; null = so pycolmap (CPU no Windows)
+
+scale:
+  method: checkerboard     # aruco | checkerboard | none
+  aruco_dict: DICT_4X4_50
+  marker_size_m: 0.22      # lado do quadrado PRETO do marcador impresso (meca com regua!)
+  marker_sizes: {}         # opcional, por id: {0: 0.20, 1: 0.15}
+  checkerboard_inner: [8, 6]   # cantos internos (colunas, linhas) se method = checkerboard (tabuleiro 9x7 casas)
+  square_size_m: 0.021      # ~2,1 cm estimado pela folha A4 nos quadros 212/290; lado de UMA casa do tabuleiro impresso (meca com regua!); varios tabuleiros iguais sao aceitos
+  manual_factor: null      # forca um fator de escala (m por unidade do SfM)
+  min_views: 3
+
+room:
+  plane_thresh_m: 0.03     # tolerancia do RANSAC de planos (chao, teto, paredes)
+  crop_margin_m: 0.30      # margem do recorte em volta da sala (remove o que aparece por janelas)
+
+dense:
+  method: auto             # auto (PatchMatch se houver CUDA, senao SGBM) | patchmatch | sgbm | none
+  max_image_size: 1200
+  sgbm_num_refs: 60        # imagens de referencia no SGBM
+  downsample_voxel_m: 0.01 # nuvem_densa_downsample.ply (1 ponto por voxel); 0 = nao salva
+
+# Medidas reais feitas com trena (Etapa 1) e de onde vem a medida do modelo:
+#   auto:width / auto:length  -> menor / maior dimensao horizontal da sala (paredes por RANSAC)
+#   auto:height               -> pe-direito (chao-teto)
+#   manual:<nome>             -> medida com `python measure.py saida --name <nome> ...`
+measurements:
+  - {name: largura,      real_cm: 570.0, model: "auto:width"}
+  - {name: comprimento,  real_cm: 580.0, model: "auto:length"}
+  # - {name: pe_direito,   real_cm: 270.0, model: "auto:height"}
+  - {name: altura_porta, real_cm: 215.0, model: "manual:altura_porta"}
+
+analysis:
+  n_pairs: 30              # pares usados na comparacao SIFT x ORB
+  pair_gap: 5              # distancia (em quadros-chave) entre as imagens de cada par
+
+ablation:
+  enabled: true
+  # runs: lista de {name, matching, loop_detection, frame_step}; vazio = padrao:
+  # exaustivo, sequencial, sequencial+laco, exaustivo 1 de 2, exaustivo 1 de 4
+
+render:
+  seconds: 45              # video de navegacao (30-60 s)
+  fps: 30
+  width: 1280
+  height: 720
+  title: "Reconstrucao 3D - Variante A"

@@ -1,0 +1,7 @@
+numpy>=1.24
+opencv-contrib-python>=4.8   # SIFT, ArUco
+pycolmap>=4.0                # COLMAP (SfM, MVS); API conferida no 4.2. Com CUDA: pip install pycolmap-cuda12
+open3d>=0.18                 # visualizacao interativa e medicao 3D
+scipy>=1.10
+matplotlib>=3.7
+pyyaml>=6.0
