@@ -39,3 +39,9 @@ desktop.ini
 
 # Arquivos compactados (cópias antigas do código, ex.: panorama_pipeline.zip)
 *.zip
+
+# Trabalho 2: video, quadros extraidos e resultados (nuvens, malhas, videos e caches passam de
+# 100 MB, o limite do GitHub). Ficam so no disco local
+/Trabalho 2/videos/
+/Trabalho 2/frames/
+/Trabalho 2/results/

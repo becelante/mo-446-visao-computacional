@@ -9,15 +9,11 @@ pontos 3D iniciais.
   - E (3x3) relaciona coordenadas normalizadas: E = K^T F K = [t]x R. Precisa
     da matriz intrinseca K e, decomposta, da a rotacao R e a direcao de t.
 """
-import importlib
 import os
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import cv2
-
-# modulos que comecam com digito nao podem ser importados com "from .2_matching import"
-match_features = importlib.import_module(".2_matching", __package__).match_features
 
 
 def build_intrinsics(width, height, focal_px=None):
@@ -90,6 +86,8 @@ def projection_matrices(K, R, t):
 
 def reprojection_errors(points3d, pts, K, R, t):
     """Distancia em pixels entre cada ponto 3D projetado na camera (R, t) e sua observacao."""
+    if len(points3d) == 0:  # o projectPoints devolve None para entrada vazia
+        return np.empty(0)
     rvec, _ = cv2.Rodrigues(R)
     projected, _ = cv2.projectPoints(points3d, rvec, t.astype(np.float64), K, None)
     return np.linalg.norm(projected.reshape(-1, 2) - pts, axis=1)
@@ -115,15 +113,13 @@ def triangulate(pts1, pts2, K, R, t, max_reproj_error=4.0):
     return points3d[valid], valid
 
 
-def two_view_geometry(kps1, descs1, kps2, descs2, K, method="SIFT", ratio_thresh=0.75,
-                      ransac_thresh=1.0, min_matches=15):
+def two_view_geometry(kps1, kps2, good, K, ransac_thresh=1.0, min_matches=15):
     """
-    Pipeline de duas vistas: matching -> F e E com RANSAC -> (R, t) -> triangulacao.
-    Retorna um dict com os matches aprovados no ratio test (`good`), F, E, R, t, as
+    Geometria de duas vistas a partir dos matches `good` (Etapa 2): F e E com RANSAC ->
+    (R, t) -> triangulacao. Retorna um dict com os matches (`good`), F, E, R, t, as
     mascaras alinhadas com `good` (`mask_F`, `mask_E`, `mask_pose`), os pontos 3D e
     metricas; R, t e os pontos ficam None se o par nao tiver geometria suficiente.
     """
-    good = match_features(descs1, descs2, method, ratio_thresh)
     result = {"good": good, "F": None, "E": None, "R": None, "t": None,
               "mask_F": None, "mask_E": None, "mask_pose": None, "points3d": None,
               "metrics": {"n_matches": len(good), "inliers_F": 0, "inliers_E": 0,
@@ -152,26 +148,27 @@ def two_view_geometry(kps1, descs1, kps2, descs2, K, method="SIFT", ratio_thresh
     return result
 
 
-def build_connectivity_matrix(all_kps, all_descs, K, method="SIFT", ratio_thresh=0.75,
-                              ransac_thresh=1.0, min_matches=15):
+def build_connectivity_matrix(all_kps, matcher, pairs, K, ransac_thresh=1.0, min_matches=15, log=print):
     """
-    Constroi a matriz N x N com o numero de inliers de E entre cada par de imagens
-    (pares processados em paralelo). Tambem retorna o resultado de
-    `two_view_geometry` de cada par (geometries[(i, j)] com i < j); o par com mais
-    pontos triangulados e um bom candidato a par inicial do SfM.
+    Constroi a matriz N x N com o numero de inliers de E entre cada par de `pairs`. O
+    matching (`matcher(i, j)`, Etapa 2) roda na GPU, um par por vez, e o RANSAC e a
+    triangulacao de cada par vao para um pool de threads na CPU enquanto a GPU casa os
+    proximos. Tambem retorna o resultado de `two_view_geometry` de cada par
+    (geometries[(i, j)] com i < j); o par com mais pontos triangulados e um bom candidato
+    a par inicial do SfM.
     """
     n = len(all_kps)
-    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-
-    def process_pair(pair):
-        i, j = pair
-        return two_view_geometry(all_kps[i], all_descs[i], all_kps[j], all_descs[j], K,
-                                 method, ratio_thresh, ransac_thresh, min_matches)
-
     connectivity = np.zeros((n, n), dtype=int)
     geometries = {}
     with ThreadPoolExecutor(os.cpu_count()) as executor:
-        for (i, j), result in zip(pairs, executor.map(process_pair, pairs)):
+        futures = {}
+        for k, (i, j) in enumerate(pairs):
+            futures[(i, j)] = executor.submit(two_view_geometry, all_kps[i], all_kps[j], matcher(i, j), K,
+                                              ransac_thresh, min_matches)
+            if (k + 1) % 2000 == 0:
+                log(f"  {k + 1}/{len(pairs)} pares casados")
+        for (i, j), future in futures.items():
+            result = future.result()
             connectivity[i, j] = connectivity[j, i] = result["metrics"]["inliers_E"]
             geometries[(i, j)] = result
 
