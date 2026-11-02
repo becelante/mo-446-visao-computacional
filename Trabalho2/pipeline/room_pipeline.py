@@ -12,7 +12,8 @@ from . import step_4_dense, step_4_room, step_4_scale_align, step_4_sfm, step_5_
 from .viz_utils import camera_frustums, trajectory_lines, write_lines_ply, write_ply
 
 
-def postprocess(rec, sfm_info, image_dir, all_names, out_dir, cfg, do_dense=True, figures=True, log=print):
+def postprocess(rec, sfm_info, image_dir, all_names, out_dir, cfg, do_dense=True, figures=True, log=print,
+                reuse_dense=False):
     os.makedirs(out_dir, exist_ok=True)
 
     # 1) escala metrica a partir da referencia
@@ -40,13 +41,25 @@ def postprocess(rec, sfm_info, image_dir, all_names, out_dir, cfg, do_dense=True
     log("[Etapa 4] limpeza da nuvem e medidas da sala")
     base = (sc["track_len"] >= 2)
     xyz0, rgb0, _ = step_4_room.clean_cloud(sc["xyz"], sc["rgb"], None, extra_mask=base)
-    room = step_4_room.measure_room(xyz0, thresh=room_cfg.get("plane_thresh_m", 0.03) * unit)
+    # teto: acima da altura tipica da camera na mao (mediana robusta a poses ruins)
+    min_ceil = float(np.median(sc["centers"][:, 2])) + 0.7 * unit if len(sc["centers"]) else 1.5 * unit
+    # as cameras ficam dentro da sala: separa as paredes opostas
+    mid_xy = np.median(sc["centers"][:, :2], axis=0) if len(sc["centers"]) else None
+    room = step_4_room.measure_room(xyz0, thresh=room_cfg.get("plane_thresh_m", 0.03) * unit, min_ceiling_z=min_ceil,
+                                    center_xy=mid_xy)
     xyz, rgb, _ = step_4_room.clean_cloud(sc["xyz"], sc["rgb"], room, extra_mask=base,
                                           crop_margin=room_cfg.get("crop_margin_m", 0.3) * unit)
     if room_cfg.get("remeasure_after_crop", True):
-        room = step_4_room.measure_room(xyz, thresh=room_cfg.get("plane_thresh_m", 0.03) * unit)
+        room = step_4_room.measure_room(xyz, thresh=room_cfg.get("plane_thresh_m", 0.03) * unit, min_ceiling_z=min_ceil,
+                                        center_xy=mid_xy)
     log(f"  sala: {room['x_extent_m']:.3f} x {room['y_extent_m']:.3f} m"
         + (f", altura {room['height_m']:.3f} m" if room["height_m"] else ", teto nao detectado"))
+    # cameras com pose incoerente (fora da sala / saltos) ficam fora do trajeto, da deriva e das figuras
+    cam_ok = step_4_room.valid_cameras(sc["centers"], room, unit)
+    room["excluded_cameras"] = [n for n, keep in zip(sc["names"], cam_ok) if not keep]
+    if room["excluded_cameras"]:
+        log(f"  {len(room['excluded_cameras'])} de {len(cam_ok)} cameras descartadas do trajeto (fora da sala ou salto isolado)")
+    sc = step_4_sfm.subset_cameras(sc, cam_ok)
     drift = step_5_metrics.loop_drift(sc["centers"], sc["names"], all_names)
     if drift:
         log(f"  deriva do laco: {drift['drift_cm']:.1f} cm ({drift['drift_pct']:.2f}% de {drift['trajectory_length_m']:.2f} m)")
@@ -71,7 +84,9 @@ def postprocess(rec, sfm_info, image_dir, all_names, out_dir, cfg, do_dense=True
             dense_xyz, dense_rgb, dense_method = step_4_dense.densify(
                 model_dir, image_dir, os.path.join(out_dir, "mvs"), dcfg.get("method", "auto"),
                 dcfg.get("max_image_size", 1200), dcfg.get("sgbm_num_refs", 60), log,
-                colmap_exe=step_4_sfm.find_colmap(cfg.get("sfm", {}).get("colmap_exe", "auto")))
+                colmap_exe=step_4_sfm.find_colmap(cfg.get("sfm", {}).get("colmap_exe", "auto")), reuse=reuse_dense,
+                fusion={"min_num_pixels": dcfg["fusion_min_num_pixels"]} if dcfg.get("fusion_min_num_pixels") else None,
+                num_src_images=dcfg.get("num_src_images"))
             if dense_xyz is not None and len(dense_xyz):
                 dense_xyz, dense_rgb, _ = step_4_room.clean_cloud(dense_xyz, dense_rgb, room,
                                                                   crop_margin=room_cfg.get("crop_margin_m", 0.3) * unit)
@@ -91,7 +106,7 @@ def postprocess(rec, sfm_info, image_dir, all_names, out_dir, cfg, do_dense=True
     log("[Etapa 5] metricas")
     manual_path = os.path.join(out_dir, "medidas_manuais.json")
     manual = json.load(open(manual_path)) if os.path.exists(manual_path) else {}
-    dims = step_5_metrics.dimension_errors(cfg.get("measurements", []), room, manual)
+    dims = step_5_metrics.dimension_errors(cfg.get("measurements", []), room, manual, metric=scale is not None)
     metrics = step_5_metrics.compute_metrics(
         errors, len(sc["xyz"]), xyz, dense_xyz, room, drift, dims,
         extra={"sfm": sfm_info, "scale": {k: v for k, v in scale_info.items() if k not in ("corners_3d", "edges")},

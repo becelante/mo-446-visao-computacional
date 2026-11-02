@@ -37,12 +37,14 @@ def surface_area_voxels(xyz, voxel=0.05):
     return n * voxel * voxel
 
 
-def dimension_errors(measurements, room, manual=None):
+def dimension_errors(measurements, room, manual=None, metric=True):
     """
     measurements: lista de {name, real_cm, model} em que `model` e
       'auto:width' | 'auto:length' | 'auto:height' | 'auto:x' | 'auto:y'  (medido pelo pipeline)
       'manual:<nome>' (medido com measure.py, salvo em <saida>/medidas_manuais.json)
       um numero (cm) medido a mao no modelo (p.ex., no MeshLab).
+    Sem escala metrica (`metric=False`) as medidas automaticas ficam em unidades do
+    SfM e o erro nao e calculado.
     """
     manual = manual or {}
     auto = {"width": room.get("width_m"), "length": room.get("length_m"), "height": room.get("height_m"),
@@ -61,7 +63,9 @@ def dimension_errors(measurements, room, manual=None):
             v = manual.get(src.split(":", 1)[1])
             est = 100 * v["distance_m"] if v is not None else None
         row = {"name": m["name"], "real_cm": real, "model_cm": est, "source": str(src)}
-        if est is not None:
+        if not metric and str(src).startswith("auto:"):
+            row["non_metric"] = True
+        elif est is not None:
             row["abs_err_cm"] = abs(est - real)
             row["rel_err_pct"] = 100 * abs(est - real) / real
         rows.append(row)
@@ -88,6 +92,7 @@ def compute_metrics(rec_errors, n_sparse_raw, sparse_clean, dense_xyz, room, dri
         m["density_dense_per_m2_floor"] = len(dense_xyz) / area
         m["density_dense_per_m2_surface"] = len(dense_xyz) / max(m["surface_area_dense_m2"], 1e-9)
     m["loop_drift"] = drift
+    m["cameras_excluded"] = room.get("excluded_cameras", [])
     m["dimensions"] = dims
     m["room"] = {k: room[k] for k in ("width_m", "length_m", "height_m", "x_extent_m", "y_extent_m",
                                      "x_source", "y_source", "floor_area_m2", "wall_angles")}
@@ -103,6 +108,10 @@ def _f(v, fmt="{:.2f}"):
 def metrics_markdown(m):
     """Tabelas prontas para colar no relatorio."""
     L = ["# Metricas (Etapa 5, Variante A)", ""]
+    if m.get("metric") is False:
+        L += ["> **ATENCAO: a referencia de escala nao foi encontrada; o modelo NAO esta em metros.**",
+              "> Medidas automaticas, areas e densidades abaixo estao em unidades do SfM e os erros",
+              "> das dimensoes nao sao calculados.", ""]
     sfm = m.get("sfm", {})
     L += ["## Reconstrucao", "", "| Metrica | Valor |", "|---|---|"]
     if sfm:
@@ -125,7 +134,8 @@ def metrics_markdown(m):
 
     L += ["## Erro metrico das dimensoes", "", "| Dimensao | Real L (cm) | Modelo L^ (cm) | abs(L^ - L) (cm) | e (%) |", "|---|---|---|---|---|"]
     for d in m["dimensions"]:
-        L.append(f"| {d['name']} | {_f(d['real_cm'], '{:.1f}')} | {_f(d['model_cm'], '{:.1f}')} | "
+        model = "sem escala" if d.get("non_metric") else _f(d["model_cm"], "{:.1f}")
+        L.append(f"| {d['name']} | {_f(d['real_cm'], '{:.1f}')} | {model} | "
                  f"{_f(d.get('abs_err_cm'), '{:.1f}')} | {_f(d.get('rel_err_pct'))} |")
     L.append("")
     dr = m.get("loop_drift")
@@ -133,7 +143,11 @@ def metrics_markdown(m):
         L += ["## Deriva do laco", "",
               f"- C1 = `{dr['first']}`, CN = `{dr['last']}`",
               f"- delta = ||CN - C1|| = **{dr['drift_cm']:.1f} cm**",
-              f"- comprimento do trajeto = {dr['trajectory_length_m']:.2f} m -> **{dr['drift_pct']:.2f}%** do trajeto", ""]
+              f"- comprimento do trajeto = {dr['trajectory_length_m']:.2f} m -> **{dr['drift_pct']:.2f}%** do trajeto"]
+        if m.get("cameras_excluded"):
+            L.append(f"- {len(m['cameras_excluded'])} camera(s) com pose incoerente (fora da sala ou salto isolado) "
+                     "ficaram fora do trajeto e da deriva")
+        L.append("")
         if not (dr.get("first_is_first_frame", True) and dr.get("last_is_last_frame", True)):
             L.append("> Atencao: o primeiro ou o ultimo quadro nao foi registrado; a deriva usa os extremos registrados.\n")
     if m["room"].get("wall_angles"):

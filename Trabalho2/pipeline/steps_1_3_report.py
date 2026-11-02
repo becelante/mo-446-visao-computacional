@@ -3,10 +3,11 @@ Figuras e tabelas das Etapas 2 e 3 geradas a partir dos quadros do video, usando
 os modulos ja implementados (step_1, step_2, step_3):
 
   - keypoints de algumas imagens (SIFT e ORB, com escala/orientacao);
-  - comparacao SIFT x ORB em pares consecutivos (keypoints, tempo, matches,
-    aprovados no ratio test, inliers de E, erro de reprojecao);
-  - matches antes/depois do ratio test + RANSAC, linhas epipolares e nuvem
-    triangulada de duas vistas para um par;
+  - comparacao SIFT x ORB em pares de quadros-chave vizinhos (keypoints, tempo,
+    matches, aprovados no ratio test e na verificacao cruzada, inliers de E,
+    erro de reprojecao);
+  - matches antes/depois do ratio test + verificacao cruzada + RANSAC, linhas
+    epipolares e nuvem triangulada de duas vistas para o par com mais paralaxe;
   - matriz de conectividade (inliers de E) num subconjunto dos quadros;
   - (se houver SfM) erro da pose relativa de duas vistas contra a pose do COLMAP.
 """
@@ -37,7 +38,7 @@ def _rot_angle_deg(R):
 
 
 def run(image_dir, names, out_dir, K=None, colmap_poses=None, methods=("SIFT", "ORB"),
-        n_pairs=30, pair_gap=3, conn_max=40, log=print):
+        n_pairs=30, pair_gap=1, conn_max=40, log=print):
     """
     colmap_poses: {nome: (R, t)} do SfM, para validar a pose de duas vistas.
     Retorna um dict com o resumo (tambem salvo em CSV/Markdown em out_dir).
@@ -73,8 +74,9 @@ def run(image_dir, names, out_dir, K=None, colmap_poses=None, methods=("SIFT", "
             t0 = time.time()
             g = S3.two_view_geometry(kp1, d1, kp2, d2, K, m)
             met = g["metrics"]
-            row = {"method": m, "pair": f"{names[i]}-{names[i + pair_gap]}", "kps": len(kp1),
-                   "t_detect_s": t1, "raw_matches": len(raw), "ratio_pass": met["n_matches"],
+            ratio_pass = sum(a.distance < 0.75 * b.distance for a, b in raw)
+            row = {"method": m, "pair": f"{names[i]}-{names[i + pair_gap]}", "pair_idx": int(i), "kps": len(kp1),
+                   "t_detect_s": t1, "raw_matches": len(raw), "ratio_pass": ratio_pass, "cross_pass": met["n_matches"],
                    "inliers_E": met["inliers_E"], "inliers_pose": met["inliers_pose"],
                    "points3d": met["n_points3d"], "reproj_median_px": met["reproj_median"]}
             if colmap_poses and g["R"] is not None and names[i] in colmap_poses and names[i + pair_gap] in colmap_poses:
@@ -96,8 +98,9 @@ def run(image_dir, names, out_dir, K=None, colmap_poses=None, methods=("SIFT", "
     for m in methods:
         rs = [r for r in rows if r["method"] == m]
         s = {k: float(np.nanmean([r[k] for r in rs])) for k in
-             ("kps", "t_detect_s", "raw_matches", "ratio_pass", "inliers_E", "points3d", "reproj_median_px")}
-        s["inlier_ratio"] = float(np.mean([r["inliers_E"] / max(r["ratio_pass"], 1) for r in rs]))
+             ("kps", "t_detect_s", "raw_matches", "ratio_pass", "cross_pass", "inliers_E", "points3d",
+              "reproj_median_px")}
+        s["inlier_ratio"] = float(np.mean([r["inliers_E"] / max(r["cross_pass"], 1) for r in rs]))
         for k in ("rot_err_deg", "t_dir_err_deg"):
             v = [r[k] for r in rs if k in r]
             if v:
@@ -106,6 +109,7 @@ def run(image_dir, names, out_dir, K=None, colmap_poses=None, methods=("SIFT", "
     md = ["| Metrica (media por par) | " + " | ".join(methods) + " |", "|---" * (len(methods) + 1) + "|"]
     labels = [("kps", "Keypoints por imagem", "{:.0f}"), ("t_detect_s", "Tempo de deteccao (s)", "{:.3f}"),
               ("raw_matches", "Matches brutos (k-NN)", "{:.0f}"), ("ratio_pass", "Aprovados no ratio test", "{:.0f}"),
+              ("cross_pass", "Aprovados na verificacao cruzada", "{:.0f}"),
               ("inliers_E", "Inliers de E (RANSAC)", "{:.0f}"), ("inlier_ratio", "Fracao de inliers", "{:.2f}"),
               ("points3d", "Pontos triangulados", "{:.0f}"), ("reproj_median_px", "Reprojecao mediana (px)", "{:.3f}"),
               ("rot_err_deg", "Erro de rotacao vs COLMAP (graus, mediana)", "{:.2f}"),
@@ -114,11 +118,15 @@ def run(image_dir, names, out_dir, K=None, colmap_poses=None, methods=("SIFT", "
         if all(k in summary[m] for m in methods):
             md.append(f"| {lab} | " + " | ".join(fmt.format(summary[m][k]) for m in methods) + " |")
     with open(os.path.join(out_dir, "comparacao_detectores.md"), "w") as f:
-        f.write(f"Pares ({len(idx)}) com {pair_gap} quadros-chave de distancia.\n\n" + "\n".join(md) + "\n")
+        f.write(f"Pares ({len(idx)}) com {pair_gap} quadros-chave de distancia.\n\n" + "\n".join(md) + "\n\n"
+                "Entre vizinhos a base e pequena perto da profundidade (rotacao quase pura): R sai bem\n"
+                "determinada, mas a direcao de t e os pontos triangulados ficam mal condicionados.\n")
     log("  comparacao de detectores:\n    " + "\n    ".join(md))
 
-    # --- um par em detalhe (SIFT) --------------------------------------------------------
-    i = int(idx[len(idx) // 2])
+    # --- um par em detalhe (SIFT): o de mais pontos triangulados (paralaxe) ---------------
+    sift_rows = [r for r in rows if r["method"] == "SIFT"]
+    i = (max(sift_rows, key=lambda r: (r["points3d"], r["inliers_E"]))["pair_idx"] if sift_rows
+         else int(idx[len(idx) // 2]))
     j = i + pair_gap
     img1, img2 = load(names[i]), load(names[j])
     kp1, d1, _ = feats[("SIFT", i)] if ("SIFT", i) in feats else (*S1.detect_features(img1), 0)

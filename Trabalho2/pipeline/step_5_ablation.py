@@ -35,7 +35,8 @@ def _subset(names, step):
     return sub
 
 
-def run_ablation(image_dir, names, out_dir, cfg, log=print):
+def run_ablation(image_dir, names, out_dir, cfg, log=print, reuse=False):
+    """`reuse`: refaz so a pos-analise sobre os SfMs ja salvos em <out_dir>/<config>/sfm."""
     os.makedirs(out_dir, exist_ok=True)
     sfm_cfg = cfg.get("sfm", {})
     cam_cfg = cfg.get("camera", {})
@@ -63,17 +64,27 @@ def run_ablation(image_dir, names, out_dir, cfg, log=print):
         log(f"[Ablacao] {name}: {len(sub)} quadros, {run['matching']}"
             + (" + laco" if run.get("loop_detection") else ""))
         run_dir = os.path.join(out_dir, name)
+        info_path = os.path.join(run_dir, "sfm", "sfm_info.json")
         t0 = time.time()
         try:
-            rec, info = step_4_sfm.run_sfm(
-                image_dir, os.path.join(run_dir, "sfm"), sub, run["matching"],
-                run.get("overlap", sfm_cfg.get("sequential_overlap", 15)), run.get("loop_detection", False),
-                sfm_cfg.get("vocab_tree"), features_db=feats_db if step == 1 else None,
-                mapper=sfm_cfg.get("mapper", "incremental"), log=log, **common)
-            if step == 1 and feat_time is not None:
-                info["time_features_s"] = feat_time
+            if reuse and os.path.exists(info_path):
+                import pycolmap
+                rec = pycolmap.Reconstruction(os.path.join(run_dir, "sfm", "sparse"))
+                info = json.load(open(info_path))
+                log("  SfM reaproveitado")
+            else:
+                rec, info = step_4_sfm.run_sfm(
+                    image_dir, os.path.join(run_dir, "sfm"), sub, run["matching"],
+                    run.get("overlap", sfm_cfg.get("sequential_overlap", 15)), run.get("loop_detection", False),
+                    sfm_cfg.get("vocab_tree"), features_db=feats_db if step == 1 else None,
+                    mapper=sfm_cfg.get("mapper", "incremental"), log=log, **common)
+                if step == 1 and feat_time is not None:
+                    info["time_features_s"] = feat_time
+                info["time_sfm_s"] = time.time() - t0 + ((feat_time or 0) if step == 1 else 0)
+                json.dump(info, open(info_path, "w"), indent=1)
+            t1 = time.time()
             m = postprocess(rec, info, image_dir, sub, run_dir, cfg, do_dense=False, figures=True, log=lambda *a: None)
-            total = time.time() - t0 + ((feat_time or 0) if step == 1 else 0)
+            total = info["time_sfm_s"] + time.time() - t1
             row = {"config": name, "matching": run["matching"], "loop_detection": bool(run.get("loop_detection", False)),
                    "frames": len(sub), "registered": info["n_reg_images"], "models": info["n_models"],
                    "verified_pairs": info.get("n_verified_pairs"), "points_sparse": m["n_sparse_points_clean"],
@@ -111,14 +122,15 @@ def _fmt(v, f="{:.2f}"):
 
 def _markdown(rows, path):
     dim_cols = sorted({k for r in rows for k in r if k.startswith("err_")})
-    head = ["Config.", "Quadros", "Registrados", "Pontos", "Reproj. media (px)", "Deriva (cm)", "Deriva (%)"] + \
-           [c[4:-3] + " (cm)" for c in dim_cols] + ["Erro medio dim. (%)", "Tempo (s)"]
+    head = ["Config.", "Quadros", "Pares verificados", "Registrados", "Pontos", "Reproj. media (px)", "Deriva (cm)",
+            "Deriva (%)"] + ["erro " + c[4:-3] + " (cm)" for c in dim_cols] + ["Erro medio dim. (%)", "Tempo (s)"]
     L = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for r in rows:
         if "error" in r:
             L.append(f"| {r['config']} | {r['frames']} | falhou: {r['error']} |" + " |" * (len(head) - 3))
             continue
-        vals = [r["config"], r["frames"], f"{r['registered']}/{r['frames']}", r["points_sparse"],
+        vals = [r["config"], r["frames"], _fmt(r.get("verified_pairs")), f"{r['registered']}/{r['frames']}",
+                r["points_sparse"],
                 _fmt(r["reproj_mean_px"], "{:.3f}"), _fmt(r["drift_cm"], "{:.1f}"), _fmt(r["drift_pct"])] + \
                [_fmt(r.get(c), "{:.1f}") for c in dim_cols] + [_fmt(r["mean_dim_err_pct"]), _fmt(r["time_total_s"], "{:.0f}")]
         L.append("| " + " | ".join(str(v) for v in vals) + " |")

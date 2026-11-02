@@ -11,6 +11,7 @@ Dois metodos:
 Os dois rodam sobre o modelo ja metrico e alinhado, entao a nuvem densa sai no
 mesmo referencial (metros, z para cima).
 """
+import json
 import os
 import shutil
 
@@ -32,19 +33,40 @@ def undistort(sparse_dir, image_dir, work_dir, max_image_size=1200):
     return pycolmap.Reconstruction(os.path.join(work_dir, "sparse"))
 
 
-def dense_patchmatch(sparse_dir, image_dir, work_dir, max_image_size=1200, colmap_exe=None, log=print):
-    log(f"  PatchMatch Stereo (COLMAP, CUDA{' via colmap.exe' if colmap_exe else ''})...")
+def fuse(work_dir, colmap_exe, fusion=None, log=print):
+    """
+    Fusao dos mapas de profundidade (geometricos) do PatchMatch em work_dir/fused.ply.
+    `fusion`: opcoes StereoFusion.* do COLMAP, p.ex. {"min_num_pixels": 3} (padrao 5:
+    um ponto precisa ser confirmado por 5 vistas). Salva as opcoes em fusion_params.json.
+    """
+    fusion = dict(fusion or {})
+    fused = os.path.join(work_dir, "fused.ply")
+    log(f"  fusao dos mapas de profundidade {fusion or '(padrao)'}...")
+    run_colmap(colmap_exe, "stereo_fusion", {
+        "workspace_path": work_dir, "input_type": "geometric", "output_type": "PLY", "output_path": fused,
+        **{f"StereoFusion.{k}": v for k, v in fusion.items()}}, os.path.join(work_dir, "colmap.log"))
+    json.dump(fusion, open(os.path.join(work_dir, "fusion_params.json"), "w"), indent=1)
+    return fused
+
+
+def dense_patchmatch(sparse_dir, image_dir, work_dir, max_image_size=1200, colmap_exe=None, log=print, fusion=None,
+                     num_src_images=None):
+    """`num_src_images`: vistas de apoio por imagem (COLMAP: 20); menos = mais rapido, menos pontos."""
+    log(f"  PatchMatch Stereo (COLMAP, CUDA{' via colmap.exe' if colmap_exe else ''}, {max_image_size} px"
+        f"{f', {num_src_images} vistas de apoio' if num_src_images else ''})...")
     undistort(sparse_dir, image_dir, work_dir, max_image_size)
+    if num_src_images:
+        cfg_path = os.path.join(work_dir, "stereo", "patch-match.cfg")
+        lines = open(cfg_path).read().splitlines()
+        open(cfg_path, "w").write("\n".join(f"__auto__, {int(num_src_images)}" if l.startswith("__auto__") else l
+                                            for l in lines) + "\n")
     fused = os.path.join(work_dir, "fused.ply")
     if colmap_exe:
         log_path = os.path.join(work_dir, "colmap.log")
         run_colmap(colmap_exe, "patch_match_stereo", {
             "workspace_path": work_dir, "PatchMatchStereo.max_image_size": max_image_size,
             "PatchMatchStereo.geom_consistency": True}, log_path)
-        log("  fusao dos mapas de profundidade...")
-        run_colmap(colmap_exe, "stereo_fusion", {
-            "workspace_path": work_dir, "input_type": "geometric", "output_type": "PLY",
-            "output_path": fused}, log_path)
+        fuse(work_dir, colmap_exe, fusion, log)
         return read_ply(fused)
     pm = pycolmap.PatchMatchOptions()
     pm.max_image_size = max_image_size
@@ -193,11 +215,52 @@ def dense_sgbm(sparse_dir, image_dir, work_dir, max_image_size=1200, num_refs=60
     return xs / cnt[:, None], (cs / cnt[:, None]).astype(np.uint8)
 
 
+def _sim3_between_models(src_dir, dst_dir):
+    """Similaridade (s, R, t) que leva os centros das cameras de src nos de dst (Umeyama).
+    Retorna tambem o residuo RMS (unidades de dst)."""
+    def centers(d):
+        rec = pycolmap.Reconstruction(d)
+        out = {}
+        for im in registered_images(rec):
+            R, t = image_pose(im)
+            out[im.name] = -R.T @ t
+        return out
+    a, b = centers(src_dir), centers(dst_dir)
+    names = sorted(set(a) & set(b))
+    X, Y = np.array([a[n] for n in names]), np.array([b[n] for n in names])
+    mx, my = X.mean(0), Y.mean(0)
+    Xc, Yc = X - mx, Y - my
+    U, S, Vt = np.linalg.svd(Yc.T @ Xc / len(X))
+    D = np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))])
+    R = U @ D @ Vt
+    s = float(np.trace(np.diag(S) @ D) / (Xc ** 2).sum(1).mean())
+    t = my - s * R @ mx
+    res = float(np.sqrt(((s * X @ R.T + t - Y) ** 2).sum(1).mean()))
+    return s, R, t, res
+
+
 def densify(sparse_dir, image_dir, work_dir, method="auto", max_image_size=1200, num_refs=60, log=print,
-            colmap_exe=None):
-    """Retorna (xyz, rgb, metodo_usado). `colmap_exe`: PatchMatch pelo executavel com CUDA."""
+            colmap_exe=None, reuse=False, fusion=None, num_src_images=None):
+    """
+    Retorna (xyz, rgb, metodo_usado). `colmap_exe`: PatchMatch pelo executavel com CUDA.
+    `reuse`: le o fused.ply de uma execucao anterior do PatchMatch em `work_dir` e o leva
+    para o referencial atual (a escala ou o alinhamento podem ter mudado, p.ex. com outro
+    `square_size_m`) pela similaridade entre os centros das cameras do modelo usado no MVS
+    (`work_dir/sparse`) e os do modelo atual. Se as opcoes de fusao (`fusion`) mudaram,
+    refaz so a fusao a partir dos mapas de profundidade salvos.
+    """
     if method == "none":
         return None, None, "none"
+    fused = os.path.join(work_dir, "fused.ply")
+    if reuse and os.path.exists(fused):
+        params = os.path.join(work_dir, "fusion_params.json")
+        used = json.load(open(params)) if os.path.exists(params) else {}
+        if dict(fusion or {}) != used and colmap_exe:
+            fuse(work_dir, colmap_exe, fusion, log)
+        xyz, rgb = read_ply(fused)
+        s, R, t, res = _sim3_between_models(os.path.join(work_dir, "sparse"), sparse_dir)
+        log(f"  nuvem densa reaproveitada de {fused} (similaridade: escala {s:.5f}, residuo {res * 100:.2f} cm)")
+        return s * xyz @ R.T + t, rgb, "patchmatch"
     has_cuda = pycolmap.has_cuda or colmap_exe is not None
     if method == "auto":
         method = "patchmatch" if has_cuda else "sgbm"
@@ -207,7 +270,7 @@ def densify(sparse_dir, image_dir, work_dir, method="auto", max_image_size=1200,
             method = "sgbm"
         else:
             xyz, rgb = dense_patchmatch(sparse_dir, image_dir, work_dir, max_image_size,
-                                        None if pycolmap.has_cuda else colmap_exe, log)
+                                        None if pycolmap.has_cuda else colmap_exe, log, fusion, num_src_images)
             return xyz, rgb, method
     xyz, rgb = dense_sgbm(sparse_dir, image_dir, work_dir, max_image_size, num_refs, log=log)
     return xyz, rgb, "sgbm"

@@ -5,6 +5,7 @@ Visualizacao dos resultados de run_pipeline.py.
     python visualize.py saida --sparse     # usa a nuvem esparsa em vez da densa
     python visualize.py saida --video      # (re)gera o video de navegacao (30-60 s)
     python visualize.py saida --glb        # Extra: exporta cena.glb para visualizacao web
+    python visualize.py saida --video --sparse --name video_esparsa.mp4   # nome do arquivo
 
 Teclas no Open3D: mouse gira/translada, scroll aproxima, '+'/'-' tamanho do ponto,
 'H' ajuda. O GLB abre em https://gltf-viewer.donmccurdy.com ou no <model-viewer>.
@@ -31,6 +32,8 @@ def load_results(out_dir, sparse=False):
     rec = pycolmap.Reconstruction(os.path.join(out_dir, "modelo_metrico"))
     sc = step_4_sfm.scene_arrays(rec)
     room = json.load(open(os.path.join(out_dir, "sala.json")))
+    excluded = set(room.get("excluded_cameras", []))  # poses incoerentes (ver step_4_room.valid_cameras)
+    sc = step_4_sfm.subset_cameras(sc, [n not in excluded for n in sc["names"]])
     return xyz, (rgb if rgb is not None else np.full((len(xyz), 3), 200, np.uint8)), sc, room, path
 
 
@@ -53,7 +56,7 @@ def show_open3d(out_dir, sparse=False):
     o3d.visualization.draw_geometries(geoms, window_name="Reconstrucao - Variante A", width=1400, height=900)
 
 
-def make_video(out_dir, rcfg=None, sparse=False, log=print):
+def make_video(out_dir, rcfg=None, sparse=False, log=print, name="video_navegacao.mp4"):
     from pipeline.render_scene import flythrough_video
     rcfg = rcfg or {}
     xyz, rgb, sc, room, path = load_results(out_dir, sparse)
@@ -62,11 +65,15 @@ def make_video(out_dir, rcfg=None, sparse=False, log=print):
     while len(xyz) > max_pts:
         voxel *= 1.4
         xyz, rgb = voxel_downsample(xyz, rgb, voxel)
-    raw = os.path.join(out_dir, "video_navegacao_mp4v.mp4")
-    final = os.path.join(out_dir, "video_navegacao.mp4")
+    final = os.path.join(out_dir, name)
+    raw = os.path.splitext(final)[0] + "_mp4v.mp4"
     w, h = rcfg.get("width", 1280), rcfg.get("height", 720)
+    # nuvem esparsa: pontos maiores e fundo claro para a estrutura aparecer; densa: cada ponto
+    # cobre o espacamento da grade do downsample (pontos menores deixam frestas regulares: moire)
+    style = (dict(splat_m=0.035, max_px=8, bg=(245, 245, 245)) if path.endswith("nuvem_esparsa.ply")
+             else dict(splat_m=max(0.012, 1.3 * voxel), max_px=10))
     flythrough_video(xyz, rgb, sc, room, raw, seconds=rcfg.get("seconds", 45), fps=rcfg.get("fps", 30),
-                     size=(w, h), title=rcfg.get("title", "Reconstrucao 3D - Variante A"), log=log)
+                     size=(w, h), title=rcfg.get("title", "Reconstrucao 3D - Variante A"), log=log, **style)
     if shutil.which("ffmpeg"):  # H.264 abre em qualquer player/PowerPoint
         subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", raw, "-c:v", "libx264", "-preset", "veryfast",
                         "-crf", "20", "-pix_fmt", "yuv420p", final], check=False)
@@ -78,7 +85,7 @@ def make_video(out_dir, rcfg=None, sparse=False, log=print):
     return final
 
 
-def export_glb(out_dir, sparse=False, max_points=1_000_000):
+def export_glb(out_dir, sparse=False, max_points=1_000_000, path=None):
     """Extra: cena em glTF binario (pontos coloridos + piramides das cameras + trajetoria)."""
     xyz, rgb, sc, room, _ = load_results(out_dir, sparse)
     voxel = 0.004
@@ -124,7 +131,7 @@ def export_glb(out_dir, sparse=False, max_points=1_000_000):
     js = json.dumps(gltf).encode()
     js += b" " * ((-len(js)) % 4)
     blob += b"\0" * ((-len(blob)) % 4)
-    path = os.path.join(out_dir, "cena.glb")
+    path = path or os.path.join(out_dir, "cena.glb")
     with open(path, "wb") as f:
         f.write(struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(blob)))
         f.write(struct.pack("<II", len(js), 0x4E4F534A) + js)
@@ -140,17 +147,19 @@ def main():
     ap.add_argument("--video", action="store_true")
     ap.add_argument("--seconds", type=float, default=None)
     ap.add_argument("--glb", action="store_true")
+    ap.add_argument("--name", default=None, help="arquivo de saida (video ou GLB) dentro de out_dir, ou caminho")
+    ap.add_argument("--config", default="config.yaml", help="secao render: do video")
     args = ap.parse_args()
     if args.video:
         rcfg = {}
-        if os.path.exists("config.yaml"):
+        if os.path.exists(args.config):
             import yaml
-            rcfg = (yaml.safe_load(open("config.yaml")) or {}).get("render", {})
+            rcfg = (yaml.safe_load(open(args.config)) or {}).get("render", {})
         if args.seconds:
             rcfg["seconds"] = args.seconds
-        make_video(args.out_dir, rcfg, args.sparse)
+        make_video(args.out_dir, rcfg, args.sparse, name=args.name or "video_navegacao.mp4")
     elif args.glb:
-        export_glb(args.out_dir, args.sparse)
+        export_glb(args.out_dir, args.sparse, path=os.path.join(args.out_dir, args.name) if args.name else None)
     else:
         show_open3d(args.out_dir, args.sparse)
 

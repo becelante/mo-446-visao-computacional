@@ -34,7 +34,7 @@ scale:
   marker_size_m: 0.22      # lado do quadrado PRETO do marcador impresso (meca com regua!)
   marker_sizes: {}         # opcional, por id: {0: 0.20, 1: 0.15}
   checkerboard_inner: [8, 6]   # cantos internos (colunas, linhas) se method = checkerboard (tabuleiro 9x7 casas)
-  square_size_m: 0.021      # ~2,1 cm estimado pela folha A4 nos quadros 212/290; lado de UMA casa do tabuleiro impresso (meca com regua!); varios tabuleiros iguais sao aceitos
+  square_size_m: 0.022      # lado de UMA casa do tabuleiro impresso, medido com regua (2,2 cm); varios tabuleiros iguais sao aceitos
   manual_factor: null      # forca um fator de escala (m por unidade do SfM)
   min_views: 3
 
@@ -45,6 +45,7 @@ room:
 dense:
   method: auto             # auto (PatchMatch se houver CUDA, senao SGBM) | patchmatch | sgbm | none
   max_image_size: 1200
+  fusion_min_num_pixels: 3 # PatchMatch: vistas que precisam confirmar cada ponto na fusao (COLMAP: 5); menor = mais pontos em paredes lisas
   sgbm_num_refs: 60        # imagens de referencia no SGBM
   downsample_voxel_m: 0.01 # nuvem_densa_downsample.ply (1 ponto por voxel); 0 = nao salva
 
@@ -60,7 +61,7 @@ measurements:
 
 analysis:
   n_pairs: 30              # pares usados na comparacao SIFT x ORB
-  pair_gap: 5              # distancia (em quadros-chave) entre as imagens de cada par
+  pair_gap: 1              # distancia (em quadros-chave) entre as imagens de cada par (1 = vizinhos, 60-80% de sobreposicao)
 
 ablation:
   enabled: true

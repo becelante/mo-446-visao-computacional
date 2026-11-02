@@ -5,7 +5,7 @@
 #   ./run.sh pasta_de_fotos/   [saida] [opcoes]
 #   ./run.sh demo                          # gera uma sala sintetica 5,0 x 4,0 x 2,7 m e roda tudo
 #
-# Opcoes uteis: --no-ablation --no-dense --no-video --no-analysis --reuse-sfm --config outro.yaml
+# Opcoes uteis: --no-ablation --no-dense --no-video --no-analysis --reuse-sfm --reuse-dense --config outro.yaml
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 INPUT="${1:?uso: ./run.sh <video|pasta|demo> [saida] [opcoes]}"

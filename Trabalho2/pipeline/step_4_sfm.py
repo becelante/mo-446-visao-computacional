@@ -264,6 +264,17 @@ def map_global(database, image_dir, out_dir, image_names=None, seed=0, colmap_ex
     return best, len(recs)
 
 
+def count_verified_pairs(db):
+    """Pares com geometria verificada (inliers > 0). O num_verified_image_pairs() do
+    COLMAP conta tambem os pares testados sem inliers (no exaustivo, todos os pares)."""
+    import sqlite3
+    con = sqlite3.connect(db)
+    try:
+        return int(con.execute("SELECT COUNT(*) FROM two_view_geometries WHERE rows > 0").fetchone()[0])
+    finally:
+        con.close()
+
+
 def run_sfm(image_dir, work_dir, image_names, matching="exhaustive", overlap=15,
             loop_detection=False, vocab_tree=None, camera_model="SIMPLE_RADIAL", focal_px=None,
             max_image_size=1600, max_num_features=8192, use_gpu="auto", features_db=None,
@@ -293,16 +304,7 @@ def run_sfm(image_dir, work_dir, image_names, matching="exhaustive", overlap=15,
     log(f"  emparelhando ({matching}{' + laco' if loop_detection and matching == 'sequential' else ''})...")
     match(db, matching, overlap, loop_detection, vocab_tree, use_gpu, colmap_exe)
     info["time_matching_s"] = time.time() - t0
-    dbo = pycolmap.Database.open(db) if hasattr(pycolmap.Database, "open") else pycolmap.Database(db)
-    try:
-        info["n_verified_pairs"] = int(dbo.num_verified_image_pairs())
-    except Exception:
-        pass
-    finally:
-        try:
-            dbo.close()
-        except Exception:
-            pass
+    info["n_verified_pairs"] = count_verified_pairs(db)
 
     t0 = time.time()
     log(f"  SfM {mapper} (com bundle adjustment)...")
@@ -360,6 +362,17 @@ def scene_arrays(rec):
         "camera": cam,
         "K": np.asarray(cam.calibration_matrix()) if cam is not None else None,
     }
+
+
+def subset_cameras(sc, mask):
+    """Copia de `scene_arrays` so com as cameras em `mask` (os pontos ficam iguais)."""
+    mask = np.asarray(mask, bool)
+    out = dict(sc)
+    for k in ("R", "t", "centers"):
+        out[k] = sc[k][mask]
+    for k in ("names", "image_ids"):
+        out[k] = [v for v, keep in zip(sc[k], mask) if keep]
+    return out
 
 
 def reprojection_errors(rec):

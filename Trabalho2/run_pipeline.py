@@ -54,7 +54,9 @@ def main():
     ap.add_argument("--no-dense", action="store_true", help="pula a densificacao")
     ap.add_argument("--no-ablation", action="store_true", help="pula o estudo de ablacao")
     ap.add_argument("--no-video", action="store_true", help="pula o video de navegacao")
-    ap.add_argument("--reuse-sfm", action="store_true", help="reaproveita o SfM ja salvo em <out>/sfm")
+    ap.add_argument("--reuse-sfm", action="store_true", help="reaproveita o SfM ja salvo em <out>/sfm (e os da ablacao)")
+    ap.add_argument("--reuse-dense", action="store_true",
+                    help="reaproveita a nuvem do PatchMatch ja salva em <out>/mvs/fused.ply (use com --reuse-sfm)")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
@@ -119,25 +121,29 @@ def main():
         try:
             steps_1_3_report.run(image_dir, names, os.path.join(args.out, "etapas_2_3"), K=sc["K"],
                                  colmap_poses=poses, n_pairs=cfg.get("analysis", {}).get("n_pairs", 30),
-                                 pair_gap=cfg.get("analysis", {}).get("pair_gap", 5), log=log)
+                                 pair_gap=cfg.get("analysis", {}).get("pair_gap", 1), log=log)
         except Exception as e:
             log(f"  AVISO: analise das Etapas 2-3 falhou: {e}")
 
     # ---------------- Etapas 4-5 -------------------------------------------------------
-    metrics = postprocess(rec, sfm_info, image_dir, names, args.out, cfg, do_dense=not args.no_dense, log=log)
+    metrics = postprocess(rec, sfm_info, image_dir, names, args.out, cfg, do_dense=not args.no_dense, log=log,
+                          reuse_dense=args.reuse_dense)
     log("\n" + open(os.path.join(args.out, "metricas.md")).read())
 
     # ---------------- Ablacao ----------------------------------------------------------
     if not args.no_ablation and cfg.get("ablation", {}).get("enabled", True):
         from pipeline.step_5_ablation import run_ablation
-        run_ablation(image_dir, names, os.path.join(args.out, "ablacao"), cfg, log=log)
+        run_ablation(image_dir, names, os.path.join(args.out, "ablacao"), cfg, log=log, reuse=args.reuse_sfm)
         log("\n" + open(os.path.join(args.out, "ablacao", "ablacao.md")).read())
 
     # ---------------- Video de navegacao -----------------------------------------------
     if not args.no_video:
         log("[Entregavel] video de navegacao")
         import visualize
-        visualize.make_video(args.out, cfg.get("render", {}), log=log)
+        # obrigatorio: nuvem esparsa + poses; a densa (recomendada) vai num segundo video
+        visualize.make_video(args.out, cfg.get("render", {}), sparse=True, log=log)
+        if os.path.exists(os.path.join(args.out, "nuvem_densa.ply")):
+            visualize.make_video(args.out, cfg.get("render", {}), log=log, name="video_navegacao_densa.mp4")
 
     log(f"=== concluido em {(time.time() - t_start) / 60:.1f} min. Resultados em {os.path.abspath(args.out)}")
 

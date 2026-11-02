@@ -1,5 +1,5 @@
 """
-Emparelhamento de características com ratio test de Lowe.
+Emparelhamento de características com ratio test de Lowe e verificação cruzada.
 """
 import numpy as np
 import cv2
@@ -27,13 +27,19 @@ def knn_match(descs1, descs2, method="SIFT"):
     return [p for p in pairs if len(p) == 2]
 
 
-def match_features(descs1, descs2, method="SIFT", ratio_thresh=0.75):
+def match_features(descs1, descs2, method="SIFT", ratio_thresh=0.75, cross_check=True):
     """
     Emparelha descritores entre duas imagens usando k-NN (k=2) e aplica o
-    ratio test de Lowe. Retorna a lista de cv2.DMatch aprovados,
+    ratio test de Lowe. Com `cross_check`, mantém só os pares mutuamente mais
+    próximos (o vizinho de i em descs2 é j e o de j em descs1 é i): sem isso,
+    texturas repetitivas fazem muitos descritores caírem no mesmo keypoint, e o
+    RANSAC aceita uma E degenerada. Retorna a lista de cv2.DMatch aprovados,
     ordenada por distância (melhores primeiro).
     """
     good = [m for m, n in knn_match(descs1, descs2, method) if m.distance < ratio_thresh * n.distance]
+    if cross_check and good:
+        back = {p[0].queryIdx: p[0].trainIdx for p in knn_match(descs2, descs1, method)}
+        good = [m for m in good if back.get(m.trainIdx) == m.queryIdx]
     good.sort(key=lambda m: m.distance)
     return good
 
@@ -41,7 +47,7 @@ def match_features(descs1, descs2, method="SIFT", ratio_thresh=0.75):
 def draw_matches_before_after(img1, kps1, img2, kps2, all_matches, good, inlier_mask,
                               out_prefix, max_draw=150, seed=0):
     """"Antes": amostra de todos os matches brutos; "Depois": amostra
-    dos aprovados no ratio test, em azul os inliers do RANSAC e em vermelho os outliers."""
+    dos aprovados no ratio test + verificação cruzada, em azul os inliers do RANSAC e em vermelho os outliers."""
     rng = np.random.default_rng(seed)
     flags = cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
     idx = rng.choice(len(all_matches), min(max_draw, len(all_matches)), replace=False) if all_matches else []

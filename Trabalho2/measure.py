@@ -14,6 +14,12 @@ Modo 2D (mais preciso): clique nos MESMOS 2 pontos (p.ex. topo e base da porta) 
 
 Modo 2D sem janela: um JSON {"frame_00012.jpg": [[x1, y1], [x2, y2]], ...}
     python measure.py saida --name altura_porta --clicks cliques.json
+
+Altura ate o chao (--ate-chao): clique so o ponto de cima (p.ex. um canto do topo da porta)
+em 2 ou mais quadros; a altura e o z do ponto triangulado acima do plano do chao (z = 0
+no modelo alinhado). Util quando a base nao aparece junto com o topo nos quadros.
+    python measure.py saida --name altura_porta --ate-chao --frames frame_00018.jpg frame_00268.jpg
+    (sem janela: {"frame_00018.jpg": [[x, y]], ...} com --clicks)
 """
 import argparse
 import json
@@ -62,7 +68,8 @@ def click_points(img_path, n=2):
             cv2.putText(disp, str(len(pts)), (x + 6, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
             cv2.imshow(win, disp)
 
-    win = f"{os.path.basename(img_path)}: clique ponto 1 e ponto 2 (mesma ordem em todos), Enter p/ seguir"
+    win = (f"{os.path.basename(img_path)}: clique o ponto, Enter p/ seguir" if n == 1 else
+           f"{os.path.basename(img_path)}: clique ponto 1 e ponto 2 (mesma ordem em todos), Enter p/ seguir")
     cv2.namedWindow(win)
     cv2.setMouseCallback(win, cb)
     cv2.imshow(win, disp)
@@ -76,26 +83,32 @@ def click_points(img_path, n=2):
     return pts
 
 
-def measure_2d(out_dir, image_dir, clicks):
+def measure_2d(out_dir, image_dir, clicks, to_floor=False):
     import pycolmap
     from pipeline.step_4_scale_align import triangulate_multiview
     rec = pycolmap.Reconstruction(os.path.join(out_dir, "modelo_metrico"))
-    obs = [[], []]
+    n = 1 if to_floor else 2
+    obs = [[] for _ in range(n)]
     registered = set(rec.reg_image_ids())
     for name, pts in clicks.items():
         img = rec.find_image_with_name(name)
         if img is None or img.image_id not in registered:
             print(f"aviso: {name} nao registrado no modelo; ignorado")
             continue
-        for k in range(2):
+        for k in range(n):
             obs[k].append((img, np.array(pts[k], float)))
     P = []
-    for k in range(2):
+    for k in range(n):
         r = triangulate_multiview(obs[k], rec, max_error_px=8.0, min_views=2)
         if r is None:
             raise SystemExit(f"Ponto {k + 1}: triangulacao falhou (use quadros com mais paralaxe).")
         P.append(r)
         print(f"ponto {k + 1}: {np.round(r[0], 3)}  (reprojecao media {r[1]:.2f} px em {r[2]} vistas)")
+    if to_floor:
+        floor_z = json.load(open(os.path.join(out_dir, "sala.json"))).get("floor_z") or 0.0
+        return float(P[0][0][2] - floor_z), {
+            "mode": "2d_ate_chao", "p1": P[0][0].tolist(), "floor_z": floor_z,
+            "reproj_px": [P[0][1]], "frames": list(clicks)}
     return float(np.linalg.norm(P[0][0] - P[1][0])), {
         "mode": "2d", "p1": P[0][0].tolist(), "p2": P[1][0].tolist(),
         "reproj_px": [P[0][1], P[1][1]], "frames": list(clicks)}
@@ -119,6 +132,8 @@ def main():
     ap.add_argument("--name", help="nome da medida (o mesmo de config.yaml, manual:<nome>)")
     ap.add_argument("--frames", nargs="+", help="quadros para o modo 2D")
     ap.add_argument("--clicks", help="JSON com os cliques (modo 2D sem janela)")
+    ap.add_argument("--ate-chao", action="store_true",
+                    help="modo 2D com 1 ponto: altura do ponto acima do plano do chao")
     ap.add_argument("--images", help="pasta das imagens (padrao: <saida>/quadros)")
     ap.add_argument("--sparse", action="store_true")
     ap.add_argument("--update-metrics", action="store_true", help="recalcula a tabela de erros com as medidas salvas")
@@ -131,10 +146,10 @@ def main():
         ap.error("--name e obrigatorio")
     image_dir = args.images or os.path.join(args.out_dir, "quadros")
     if args.clicks:
-        dist, det = measure_2d(args.out_dir, image_dir, json.load(open(args.clicks)))
+        dist, det = measure_2d(args.out_dir, image_dir, json.load(open(args.clicks)), args.ate_chao)
     elif args.frames:
-        clicks = {f: click_points(os.path.join(image_dir, f)) for f in args.frames}
-        dist, det = measure_2d(args.out_dir, image_dir, clicks)
+        clicks = {f: click_points(os.path.join(image_dir, f), 1 if args.ate_chao else 2) for f in args.frames}
+        dist, det = measure_2d(args.out_dir, image_dir, clicks, args.ate_chao)
     else:
         dist, det = measure_3d(args.out_dir, args.sparse)
     save(args.out_dir, args.name, dist, det)

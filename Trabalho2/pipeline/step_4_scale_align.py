@@ -39,7 +39,9 @@ def detect_checkerboard(gray, inner=(9, 6)):
     """Cantos internos do tabuleiro (N x 2) em ordem canonica, ou None."""
     s = 1600 / max(gray.shape)
     small = cv2.resize(gray, None, fx=s, fy=s) if s < 1 else gray
-    ok, c = cv2.findChessboardCornersSB(small, tuple(inner), cv2.CALIB_CB_EXHAUSTIVE)
+    # flags nomeado: o 3o argumento posicional do binding Python e a saida `corners`
+    ok, c = cv2.findChessboardCornersSB(small, tuple(inner),
+                                        flags=cv2.CALIB_CB_EXHAUSTIVE | cv2.CALIB_CB_NORMALIZE_IMAGE)
     if not ok:
         return None
     c = c.reshape(-1, 2) / min(s, 1.0)
@@ -191,6 +193,8 @@ def estimate_scale(rec, image_dir, cfg, log=print):
                 a, b = (mid, k), (mid, (k + 1) % 4)
                 if a in pts and b in pts:
                     d = np.linalg.norm(pts[a][0] - pts[b][0])
+                    if not d > 1e-9:  # cantos triangulados no mesmo ponto (geometria degenerada)
+                        continue
                     ratios.append(side_real / d)
                     edges.append({"marker": mid, "edge": k, "model_len": float(d), "real_m": side_real})
     else:
@@ -202,6 +206,8 @@ def estimate_scale(rec, image_dir, cfg, log=print):
                 for nb in ([k + 1] if c + 1 < cols else []) + ([k + cols] if r + 1 < rows else []):
                     if ("cb", b, k) in pts and ("cb", b, nb) in pts:
                         d = np.linalg.norm(pts[("cb", b, k)][0] - pts[("cb", b, nb)][0])
+                        if not d > 1e-9:  # cantos triangulados no mesmo ponto (geometria degenerada)
+                            continue
                         ratios.append(sq / d)
                         edges.append({"board": b, "corner": k, "neighbor": nb, "model_len": float(d), "real_m": sq})
     info = {"method": method, "n_corners_3d": len(pts), "n_edges": len(ratios),
@@ -213,6 +219,13 @@ def estimate_scale(rec, image_dir, cfg, log=print):
     ratios = np.array(ratios)
     med = float(np.median(ratios))
     good = np.abs(ratios / med - 1) < 0.1  # descarta arestas incoerentes (>10% da mediana)
+    if good.sum() < 0.5 * len(ratios):
+        # tabuleiros discordam (p.ex. deriva sem fechamento de laco): a mediana cai entre os grupos;
+        # usa o maior grupo de arestas coerentes entre si
+        support = (np.abs(ratios[:, None] / ratios[None, :] - 1) < 0.1).sum(1)
+        good = np.abs(ratios / ratios[np.argmax(support)] - 1) < 0.1
+        log(f"  AVISO: arestas em grupos de escala diferentes; usando o maior grupo ({good.sum()} de {len(ratios)})")
+        info["scale_consensus_fallback"] = True
     scale = float(np.median(ratios[good]))
     info.update(scale=scale, scale_rel_std=float(ratios[good].std() / scale), n_edges_used=int(good.sum()),
                 edges=edges)

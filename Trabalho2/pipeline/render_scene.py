@@ -27,6 +27,21 @@ def _overlays(img, sc, K, R, t, frustum_depth, every):
     return img
 
 
+def _render_aa(xyz, rgb, R, t, size, fov_deg, ss=2, **style):
+    """
+    Renderiza os pontos em `ss` vezes a resolucao e reduz por media (anti-aliasing):
+    sem isso, pontos em grade regular (paredes planas depois do downsample por voxel)
+    amostrados pela grade de pixels geram moire. Retorna (imagem, K na resolucao final).
+    """
+    big = (size[0] * ss, size[1] * ss)
+    style = dict(style)
+    style["max_px"] = style.get("max_px", 4) * ss
+    img = render_points(xyz, rgb, intrinsics_for(big, fov_deg), R, t, big, **style)
+    if ss > 1:
+        img = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+    return img, intrinsics_for(size, fov_deg)
+
+
 def _label(img, text, y=30):
     cv2.putText(img, text, (16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 4, cv2.LINE_AA)
     cv2.putText(img, text, (16, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
@@ -38,9 +53,8 @@ def render_overview(xyz, rgb, sc, room, out_path, size=(1600, 1000)):
     r = 1.25 * np.linalg.norm(half) + 1.0
     eye = center + np.array([r * np.cos(-2.2), r * np.sin(-2.2), top * 1.9 + 1.5])
     m = cutaway_mask(xyz, eye, center, half, top)
-    K = intrinsics_for(size, 55)
     R, t = look_at(eye, center)
-    img = render_points(xyz[m], rgb[m], K, R, t, size, splat_m=0.015, bg=(245, 245, 245))
+    img, K = _render_aa(xyz[m], rgb[m], R, t, size, 55, splat_m=0.015, max_px=6, bg=(245, 245, 245))
     every = max(1, len(sc["centers"]) // 60)
     _overlays(img, sc, K, R, t, 0.18, every)
     _label(img, "Nuvem + poses das cameras (laranja) + trajetoria (vermelho)")
@@ -48,12 +62,17 @@ def render_overview(xyz, rgb, sc, room, out_path, size=(1600, 1000)):
 
 
 def flythrough_video(xyz, rgb, sc, room, out_path, seconds=45, fps=30, size=(1280, 720),
-                     title="Reconstrucao 3D", orbit_frac=0.6, log=print):
+                     title="Reconstrucao 3D", orbit_frac=0.6, log=print, splat_m=0.012, max_px=4,
+                     bg=(28, 28, 32), supersample=2):
     """
     Video de navegacao: (1) orbita completa em volta da sala, vista de cima e com
     corte; (2) percurso pela trajetoria real (suavizada), em primeira pessoa,
     mostrando as cameras. Renderizado em numpy (nao precisa de janela/GPU).
+    `splat_m`/`max_px`: tamanho dos pontos (maiores para a nuvem esparsa); `bg`: fundo (BGR).
+    `supersample`: renderiza em N x a resolucao e reduz (anti-aliasing, evita moire).
     """
+    style = dict(splat_m=splat_m, max_px=max_px, bg=bg)
+    fov = 62
     center, half, top = _room_geom(room, xyz)
     K = intrinsics_for(size, 62)
     n_total = int(seconds * fps)
@@ -69,7 +88,7 @@ def flythrough_video(xyz, rgb, sc, room, out_path, seconds=45, fps=30, size=(128
         eye = center + np.array([r * np.cos(a), r * np.sin(a), elev])
         m = cutaway_mask(xyz, eye, center, half, top)
         R, t = look_at(eye, center)
-        img = render_points(xyz[m], rgb[m], K, R, t, size)
+        img, _ = _render_aa(xyz[m], rgb[m], R, t, size, fov, supersample, **style)
         _overlays(img, sc, K, R, t, 0.15, every)
         _label(img, title)
         _label(img, f"{len(xyz)} pontos | {len(sc['centers'])} cameras", 58)
@@ -97,7 +116,7 @@ def flythrough_video(xyz, rgb, sc, room, out_path, seconds=45, fps=30, size=(128
         d /= np.linalg.norm(d)
         eye = pos - 0.6 * d + np.array([0, 0, 0.25])  # um pouco atras e acima da camera
         R, t = look_at(eye, eye + d)
-        img = render_points(xyz[no_ceiling], rgb[no_ceiling], K, R, t, size)
+        img, _ = _render_aa(xyz[no_ceiling], rgb[no_ceiling], R, t, size, fov, supersample, **style)
         _overlays(img, sc, K, R, t, 0.15, every)
         _label(img, title + " - percurso da camera")
         writer.write(img)
