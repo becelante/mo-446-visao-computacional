@@ -4,8 +4,8 @@ Figuras e tabelas das Etapas 2 e 3 a partir dos quadros-chave (modulos step_1, s
   - keypoints de algumas imagens (SIFT padrao, SIFT de limiar baixo e ORB, com escala/orientacao);
   - comparacao dos detectores em pares de quadros-chave vizinhos: keypoints, tempo, aprovados no
     ratio test e na verificacao cruzada, inliers de E (RANSAC, 4 px) e pares com geometria
-    (>= 15 inliers; pares sem geometria contam como zero). O SIFT do COLMAP, o do pipeline,
-    entra com os keypoints e o tempo da extracao;
+    (>= 15 inliers; pares com menos de 15 matches contam como zero). O SIFT do COLMAP, o do
+    pipeline, entra com os keypoints (nos mesmos quadros) e o tempo da extracao;
   - matches antes/depois, linhas epipolares e triangulacao de duas vistas do par com mais
     inliers (SIFT de limiar baixo);
   - matriz de conectividade (inliers de E) num subconjunto dos quadros.
@@ -55,7 +55,8 @@ def compare_detectors(load, names, K, colmap_sift, n_pairs, pair_gap, out_dir, l
           "| Metrica (media por par) | " + " | ".join(cols) + " |", "|---" * (len(cols) + 1) + "|"]
     by = {m: [r for r in rows if r["method"] == m] for m in METHODS}
     mean = lambda m, k: np.mean([r[k] for r in by[m]])
-    lines = [("Keypoints por imagem", lambda m: f"{mean(m, 'kps'):.0f}", f"{colmap_sift['kps']:.0f}"),
+    colmap_kps = np.mean([len(colmap_sift["kps"][names[i]]) for i in idx])
+    lines = [("Keypoints por imagem", lambda m: f"{mean(m, 'kps'):.0f}", f"{colmap_kps:.0f}"),
              ("Tempo de deteccao por imagem (s)", lambda m: f"{mean(m, 't_detect_s'):.3f}", f"{colmap_sift['t']:.3f}"),
              ("Pares com geometria (>= 15 inliers)", lambda m: f"{sum(r['inliers_E'] >= 15 for r in by[m])} / {len(idx)}", "-"),
              ("Aprovados no ratio test", lambda m: f"{mean(m, 'ratio_pass'):.0f}", "-"),

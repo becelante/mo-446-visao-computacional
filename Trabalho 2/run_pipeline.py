@@ -18,7 +18,6 @@ import json
 import os
 import time
 
-import numpy as np
 import pycolmap
 
 import visualize
@@ -85,8 +84,7 @@ def main():
         log("  AVISO: menos de 80% das imagens registradas (pouca textura, borrao ou pouca sobreposicao)")
 
     log("[Etapas 2-3] keypoints, SIFT x ORB, matches, geometria epipolar, conectividade")
-    colmap_kps = step_4_sfm.keypoints_per_image(os.path.join(out, "sfm", "database.db"))
-    colmap_sift = {"kps": np.mean([len(k) for k in colmap_kps.values()]),
+    colmap_sift = {"kps": step_4_sfm.keypoints_per_image(os.path.join(out, "sfm", "database.db")),
                    "t": sfm_info["time_features_s"] / len(names)}
     steps_1_3_report.run(image_dir, names, os.path.join(out, "etapas_2_3"), step_4_sfm.scene_arrays(rec)["K"],
                          colmap_sift, cfg["analysis"]["n_pairs"], cfg["analysis"]["pair_gap"], log=log)
