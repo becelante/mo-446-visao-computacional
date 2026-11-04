@@ -1,0 +1,44 @@
+"""
+Emparelhamento de características com ratio test de Lowe e verificação cruzada.
+"""
+import numpy as np
+import cv2
+
+def create_matcher(method="SIFT"):
+    if method.upper() == "ORB":
+        return cv2.BFMatcher(cv2.NORM_HAMMING)
+    return cv2.FlannBasedMatcher(dict(algorithm=1, trees=5), dict(checks=50))
+
+def knn_match(descs1, descs2, method="SIFT"):
+    if descs1 is None or descs2 is None or len(descs1) < 2 or len(descs2) < 2:
+        return []
+    dtype = np.uint8 if method.upper() == "ORB" else np.float32
+    # o FLANN é aleatório; a semente fixa (por thread) deixa o resultado reprodutível
+    cv2.setRNGSeed(0)
+    pairs = create_matcher(method).knnMatch(descs1.astype(dtype), descs2.astype(dtype), k=2)
+    return [p for p in pairs if len(p) == 2]
+
+def match_features(descs1, descs2, method="SIFT", ratio_thresh=0.75, cross_check=True):
+    good = [m for m, n in knn_match(descs1, descs2, method) if m.distance < ratio_thresh * n.distance]
+    if cross_check and good:
+        back = {p[0].queryIdx: p[0].trainIdx for p in knn_match(descs2, descs1, method)}
+        good = [m for m in good if back.get(m.trainIdx) == m.queryIdx]
+    good.sort(key=lambda m: m.distance)
+    return good
+
+def draw_matches_before_after(img1, kps1, img2, kps2, all_matches, good, inlier_mask,
+                              out_prefix, max_draw=150, seed=0):
+    rng = np.random.default_rng(seed)
+    flags = cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
+    idx = rng.choice(len(all_matches), min(max_draw, len(all_matches)), replace=False) if all_matches else []
+    before = cv2.drawMatches(img1, kps1, img2, kps2, [all_matches[i] for i in idx], None,
+                             matchColor=(0, 100, 200), flags=flags)
+    cv2.imwrite(f"{out_prefix}_antes.jpg", before)
+
+    mask = inlier_mask if inlier_mask is not None else np.ones(len(good), bool)
+    idx = rng.choice(len(good), min(max_draw, len(good)), replace=False) if good else []
+    after = cv2.drawMatches(img1, kps1, img2, kps2, [good[i] for i in idx if mask[i]], None,
+                            matchColor=(255, 100, 0), flags=flags)
+    after = cv2.drawMatches(img1, kps1, img2, kps2, [good[i] for i in idx if not mask[i]], after,
+                            matchColor=(0, 0, 255), flags=flags | cv2.DrawMatchesFlags_DRAW_OVER_OUTIMG)
+    cv2.imwrite(f"{out_prefix}_depois.jpg", after)

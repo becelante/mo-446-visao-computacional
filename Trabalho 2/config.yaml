@@ -1,0 +1,92 @@
+# Variante A (ambiente interno). Metros, exceto as medidas reais (cm).
+# O bloco `videos.<video>` e aplicado por cima das secoes comuns.
+
+video: C                   # videos/<video>.MTS -> results/<video>/ (ou a variavel de ambiente VIDEO)
+
+frames:
+  target_overlap: 0.80
+  min_frames: 100
+  max_frames: 300
+  max_dim: 1920
+  blur_rel_thresh: 0.5     # evita quadros com nitidez < 50% da mediana local
+  max_gap_s: 2.0
+
+camera:
+  model: SIMPLE_RADIAL
+  focal_px: null           # chute inicial (px); o mapeador global precisa dele
+
+sfm:
+  matching: exhaustive     # exhaustive | sequential
+  sequential_overlap: 15
+  loop_detection: true     # so no sequencial
+  vocab_tree: null         # null = arvore oficial do COLMAP
+  max_image_size: 1600
+  max_num_features: 8192
+  mapper: global           # global (GLOMAP) | incremental
+  sift_peak_threshold: 0.002 # padrao do COLMAP: 0.0067
+  clahe: false
+  use_gpu: false           # SIFT e emparelhamento na CPU (como no relatorio); o PatchMatch usa a GPU
+  colmap_exe: auto         # COLMAP com CUDA (ferramentas/colmap ou PATH); null = so pycolmap
+
+scale:                     # tabuleiro images/Checkerboard-A4-25mm-8x6 (9 x 7 casas)
+  checkerboard_inner: [8, 6]
+  square_size_m: 0.022     # medido na folha impressa (o PDF diz 25 mm)
+  min_views: 3
+
+room:
+  plane_thresh_m: 0.03
+  crop_margin_m: 0.30
+
+dense:
+  method: auto             # auto (PatchMatch com CUDA, senao SGBM) | patchmatch | sgbm | none
+  max_image_size: 800
+  num_src_images: 10       # vistas de apoio por imagem no PatchMatch (COLMAP: 20)
+  fusion_min_num_pixels: 3
+  sgbm_num_refs: 60
+  downsample_voxel_m: 0.01
+
+analysis:
+  n_pairs: 30
+  pair_gap: 1
+
+ablation:
+  enabled: true
+  n_frames: [100, 200, 300, 400, 496]  # quadros espalhados uniformemente pelo video
+
+render:
+  seconds: 45
+  fps: 30
+  width: 1280
+  height: 720
+  title: "Reconstrucao 3D - Variante A"
+
+# measurements: auto:width | auto:length | auto:height (medidos nos planos da sala) ou
+# manual:<nome>, triangulado de `manual_points.<nome>`: o mesmo ponto (pixel x, y) em 2+ quadros
+# de results/<video>/quadros; com to_floor, a altura do ponto acima do chao
+videos:
+  A:  # Laboratorio do Recod
+    camera: {focal_px: 1538}
+    measurements:
+      - {name: largura,      real_cm: 695.0,  model: "auto:width"}
+      - {name: comprimento,  real_cm: 1275.0, model: "auto:length"}
+      - {name: altura_porta, real_cm: 212.0,  model: "manual:altura_porta"}
+  B:  # Sala 90 do IC
+    camera: {focal_px: 1532}
+    measurements:
+      - {name: largura,      real_cm: 620.0, model: "auto:width"}
+      - {name: comprimento,  real_cm: 900.0, model: "auto:length"}
+      - {name: altura_porta, real_cm: 216.0, model: "manual:altura_porta"}
+    manual_points:
+      altura_porta:  # canto superior esquerdo do batente da porta azul
+        to_floor: true
+        clicks: {frame_00047.jpg: [[252, 357]], frame_00048.jpg: [[218, 104]]}
+  C:  # Copa do IC (o video do relatorio)
+    camera: {focal_px: 1532}
+    measurements:
+      - {name: largura,      real_cm: 570.0, model: "auto:width"}
+      - {name: comprimento,  real_cm: 580.0, model: "auto:length"}
+      - {name: altura_porta, real_cm: 215.0, model: "manual:altura_porta"}
+    manual_points:
+      altura_porta:  # canto superior direito do batente da porta dupla
+        to_floor: true
+        clicks: {frame_00020.jpg: [[1119, 610]], frame_00268.jpg: [[866, 21]]}
