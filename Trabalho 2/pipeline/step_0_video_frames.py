@@ -160,16 +160,22 @@ def extract_uniform_frames(video_path, out_dir, n, max_dim=1920):
     os.makedirs(out_dir, exist_ok=True)
     cap = cv2.VideoCapture(video_path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    keyset = set(np.linspace(0, total - 1, n).round().astype(int).tolist())
-    i, names = 0, []
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    keys = sorted(set(np.linspace(0, total - 1, n).round().astype(int).tolist()))
+    keyset = set(keys)
+    i, names, size = 0, [], None
     while True:
         ok, frame = cap.read()
         if not ok:
             break
         if i in keyset:
+            size = frame.shape[1], frame.shape[0]
             names.append(f"frame_{len(names):05d}.jpg")
             cv2.imwrite(os.path.join(out_dir, names[-1]), _resize_max(frame, max_dim), [cv2.IMWRITE_JPEG_QUALITY, 95])
         i += 1
     cap.release()
-    json.dump({"names": names}, open(frames_json, "w"), indent=1)
+    info = {"video": os.path.abspath(video_path), "fps": fps, "video_size": size, "n_video_frames": i,
+            "duration_s": i / fps, "n_keyframes": len(names), "keyframe_indices": keys[:len(names)],
+            "timestamps_s": [k / fps for k in keys[:len(names)]], "names": names}
+    json.dump(info, open(frames_json, "w"), indent=1)
     return names

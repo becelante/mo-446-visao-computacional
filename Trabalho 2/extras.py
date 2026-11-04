@@ -292,6 +292,9 @@ def extra_malha(out, d, cfg, depth=10, density_q=0.08, log=print):
     mesh.compute_vertex_normals()
     t_mesh = time.time() - t0
     o3d.io.write_triangle_mesh(os.path.join(d, "malha_poisson.ply"), mesh)
+    web = mesh.simplify_quadric_decimation(300_000)
+    web.remove_unreferenced_vertices()
+    o3d.io.write_triangle_mesh(os.path.join(d, "malha_poisson_web.ply"), web)
 
     smp = mesh.sample_points_uniformly(1_000_000)
     xyz, rgb = np.asarray(smp.points), (np.asarray(smp.colors) * 255).astype(np.uint8)
@@ -315,7 +318,8 @@ def extra_malha(out, d, cfg, depth=10, density_q=0.08, log=print):
                             [[len(mesh.vertices), len(mesh.triangles), f"{area:.1f}", f"{t_mesh:.0f}"]])
                 + "\n\nA malha fecha buracos das paredes lisas e do piso por interpolacao: serve para visualizar, "
                 "mas as medidas continuam vindo dos planos ajustados aos pontos.\n\n"
-                "Arquivos: `malha_poisson.ply` (abre no MeshLab/Open3D/Blender), `malha_vista_geral.png`"
+                "Arquivos: `malha_poisson.ply` (abre no MeshLab/Open3D/Blender), `malha_poisson_web.ply` "
+                "(simplificada para 300 mil triangulos), `malha_vista_geral.png`"
                 + ", `video_malha.mp4`.\n")
     log(f"  malha: {len(mesh.vertices)} vertices, {len(mesh.triangles)} triangulos, {area:.1f} m2")
 

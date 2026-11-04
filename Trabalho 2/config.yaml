@@ -4,6 +4,7 @@
 video: C                   # videos/<video>.MTS -> results/<video>/ (ou a variavel de ambiente VIDEO)
 
 frames:
+  uniform: null            # N quadros espalhados uniformemente pelo video em vez da selecao adaptativa
   target_overlap: 0.80
   min_frames: 100
   max_frames: 300
@@ -65,13 +66,20 @@ render:
 # de results/<video>/quadros; com to_floor, a altura do ponto acima do chao
 videos:
   A:  # Laboratorio do Recod
+    frames: {uniform: 400}     # mede melhor que os quadros-chave neste video (ablacao)
     camera: {focal_px: 1538}
     measurements:
       - {name: largura,      real_cm: 695.0,  model: "auto:width"}
       - {name: comprimento,  real_cm: 1275.0, model: "auto:length"}
       - {name: altura_porta, real_cm: 212.0,  model: "manual:altura_porta"}
+    manual_points:
+      altura_porta:  # canto superior direito da porta branca, do lado da macaneta
+        to_floor: true
+        clicks: {frame_00105.jpg: [[197, 315]], frame_00107.jpg: [[150, 234]], frame_00109.jpg: [[131, 200]]}
   B:  # Sala 90 do IC
+    frames: {uniform: 400}     # mede melhor que os quadros-chave neste video (ablacao)
     camera: {focal_px: 1532}
+    sfm: {matching: sequential}  # seq. + laco: mede melhor que o exaustivo neste video (ablacao)
     measurements:
       - {name: largura,      real_cm: 620.0, model: "auto:width"}
       - {name: comprimento,  real_cm: 900.0, model: "auto:length"}
@@ -79,7 +87,7 @@ videos:
     manual_points:
       altura_porta:  # canto superior esquerdo do batente da porta azul
         to_floor: true
-        clicks: {frame_00047.jpg: [[252, 357]], frame_00048.jpg: [[218, 104]]}
+        clicks: {frame_00058.jpg: [[295, 768]], frame_00059.jpg: [[246, 334]], frame_00060.jpg: [[278, 192]]}
   C:  # Copa do IC (o video do relatorio)
     camera: {focal_px: 1532}
     measurements:

@@ -40,8 +40,12 @@ def extract_frames(cfg, image_dir, log):
     if os.path.exists(frames_json):
         log(f"[Etapa 1] quadros reaproveitados de {image_dir}")
         return json.load(open(frames_json))["names"]
-    log("[Etapa 1] extraindo quadros-chave do video")
     fcfg = cfg["frames"]
+    if fcfg["uniform"]:
+        log(f"[Etapa 1] {fcfg['uniform']} quadros espalhados uniformemente pelo video")
+        return step_0_video_frames.extract_uniform_frames(config.video_path(cfg), image_dir, fcfg["uniform"],
+                                                          fcfg["max_dim"])
+    log("[Etapa 1] extraindo quadros-chave do video")
     info = step_0_video_frames.extract_keyframes(
         config.video_path(cfg), image_dir, fcfg["target_overlap"], fcfg["min_frames"], fcfg["max_frames"],
         fcfg["max_dim"], fcfg["blur_rel_thresh"], fcfg["max_gap_s"])
