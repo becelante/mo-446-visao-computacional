@@ -1,0 +1,5 @@
+# Trabalho 3: copy-move em imagens biomedicas. Caminhos relativos a esta pasta.
+data_dir: data
+results_dir: results
+seed: 42
+amp: true        # precisao mista (float16) na GPU: metade da memoria e ~3x mais rapido na RTX 3050

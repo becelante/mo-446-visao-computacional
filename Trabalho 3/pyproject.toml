@@ -1,0 +1,36 @@
+[project]
+name = "trabalho-3-forgery"
+version = "0.1.0"
+description = "Deteccao e segmentacao de copy-move em imagens biomedicas (Trabalho 3, MO446)"
+readme = "README.md"
+authors = [{ name = "Beatriz Celante", email = "beatrizcelante@gmail.com" }]
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "torch>=2.6",
+    "torchvision>=0.21",
+    "timm>=1.0",
+    "segmentation-models-pytorch>=0.5",
+    "opencv-python>=4.8",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "scikit-learn>=1.4",
+    "pandas>=2.1",
+    "matplotlib>=3.8",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "pillow>=10",
+    "kaggle>=1.6",
+    "numba>=0.68.1",
+    "ipykernel>=7.4.0",
+    "six>=1.17.0",
+]
+
+# PyTorch com CUDA 12.8 (driver 615 / CUDA 13.4 e compativel). Sem GPU, a mesma roda em CPU.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
