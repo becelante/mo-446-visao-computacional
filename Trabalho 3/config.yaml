@@ -3,3 +3,34 @@ data_dir: data
 results_dir: results
 seed: 42
 amp: true        # precisao mista (float16) na GPU: metade da memoria e ~3x mais rapido na RTX 3050
+
+# Baseline classico (baseline/sift.py). Os limiares sao escolhidos na validacao entre os valores da grade.
+baseline_sift:
+  max_side: [1024, 2048]       # lado maior da imagem ao extrair os pontos (imagens menores nao sao ampliadas)
+  n_features: 5000             # maximo de pontos SIFT por imagem (e por imagem espelhada)
+  min_dist: 10                 # px: pares mais proximos que isso sao a mesma estrutura, nao uma copia
+  grid:
+    ratio: [0.3, 0.4, 0.5, 0.6, 0.7, 0.8]  # teste de Lowe: aceita o par se d1/d2 < ratio
+    min_inliers: [4, 6, 8, 12, 20]       # pares minimos seguindo a mesma transformacao para declarar copia
+    ransac_px: [3.0]                     # tolerancia do RANSAC (px)
+    corr_thr: [0.8, 0.9]                 # correlacao local minima para um pixel entrar na mascara
+    min_area: [0.0005]                   # area minima de uma instancia (fracao da imagem)
+
+# Rede de segmentacao (pipeline/segmenter.py, train.py, predict.py).
+unet:
+  encoder: resnet34            # encoder pre-treinado no ImageNet (segmentation-models-pytorch)
+  size: 768                    # lado da entrada: lado maior da imagem -> 768 px, resto preenchido com zeros
+  batch_size: 6
+  epochs: 30
+  lr: 0.0003
+  weight_decay: 0.0001
+  patience: 8                  # para se o S da validacao nao melhorar por tantas epocas
+  num_workers: 4
+  # limiares usados durante o treino (o predict.py escolhe os melhores na validacao, com a grade abaixo)
+  pix_thr: 0.5                 # probabilidade minima para um pixel entrar na mascara
+  p_thr: 0.5                   # probabilidade maxima da imagem abaixo disso -> authentic
+  min_area: 0.0005             # mascara menor que isso (fracao da imagem) -> authentic
+  grid:
+    pix_thr: [0.3, 0.4, 0.5, 0.6]
+    p_thr: [0.5, 0.6, 0.7, 0.8, 0.9]
+    min_area: [0.0005, 0.002]

@@ -23,6 +23,8 @@ dependencies = [
     "numba>=0.68.1",
     "ipykernel>=7.4.0",
     "six>=1.17.0",
+    "lightning>=2.6.6",
+    "tensorboard>=2.21.0",
 ]
 
 # PyTorch com CUDA 12.8 (driver 615 / CUDA 13.4 e compativel). Sem GPU, a mesma roda em CPU.

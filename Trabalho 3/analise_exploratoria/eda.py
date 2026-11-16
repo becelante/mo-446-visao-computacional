@@ -1,56 +1,14 @@
 """Funcoes da analise exploratoria (usadas pelo notebook analise_exploratoria.ipynb).
 
-Formato esperado dos dados (Kaggle Recod.ai/LUC), dentro de data/:
-    train_images/authentic/<case_id>.png      imagens autenticas
-    train_images/forged/<case_id>.png         imagens forjadas
-    train_masks/<case_id>.npy                 mascaras das forjadas, shape (N, H, W)
+A leitura dos dados (list_images, load_image, load_masks) fica em pipeline/data.py.
 
-Termos: cada mascara e uma INSTANCIA (um par de copias: origem + destino); cada mancha separada
+Termos: cada mascara e uma INSTANCIA (uma origem e todas as copias dela); cada mancha separada
 dentro dela e um PEDACO (componente conexo). Em geral uma instancia tem dois pedacos.
-    supplemental_images/, supplemental_masks/ (opcional) mesmo esquema
 """
-import os
-from glob import glob
-
 import cv2
 import numpy as np
-import pandas as pd
-from PIL import Image
 
-
-# ---------------------------------------------------------------- leitura
-
-def load_masks(path, shape):
-    """Mascaras (N, H, W) bool de um .npy. Aceita tambem (H, W) e (H, W, N)."""
-    m = np.load(path)
-    if m.ndim == 2:
-        m = m[None]
-    if m.shape[1:] != tuple(shape) and m.shape[:2] == tuple(shape):
-        m = m.transpose(2, 0, 1)
-    return m > 0
-
-
-def load_image(path):
-    return np.array(Image.open(path).convert("RGB"))
-
-
-def list_images(data_dir):
-    """Uma linha por imagem: case_id, classe, origem (train/supplemental) e caminhos."""
-    rows = []
-    for source in ("train", "supplemental"):
-        img_dir = os.path.join(data_dir, f"{source}_images")
-        mask_dir = os.path.join(data_dir, f"{source}_masks")
-        for path in sorted(glob(os.path.join(img_dir, "**", "*.png"), recursive=True)):
-            case_id = os.path.splitext(os.path.basename(path))[0]
-            folder = os.path.basename(os.path.dirname(path))
-            mask_path = os.path.join(mask_dir, case_id + ".npy")
-            if folder in ("authentic", "forged"):
-                label = folder
-            else:                                   # pasta sem subdivisao: classe pela existencia da mascara
-                label = "forged" if os.path.exists(mask_path) else "authentic"
-            rows.append({"case_id": case_id, "classe": label, "origem": source, "path": path,
-                         "mask_path": mask_path if label == "forged" else None})
-    return pd.DataFrame(rows)
+from pipeline.data import list_images, load_image, load_masks  # noqa: F401 (usadas pelo notebook)
 
 
 # ---------------------------------------------------------------- estatisticas por imagem
@@ -160,6 +118,37 @@ def diff_vs_authentic(forged_path, authentic_path, masks, thr=10):
     return {"frac_mascara_alterada": changed[union].mean() if union.any() else np.nan,
             "frac_alterado_fora_mascara": changed[~union].sum() / max(changed.sum(), 1),
             "por_pedaco_alterado": [changed[p].mean() for m in masks for p, _, _ in pieces(m)]}
+
+
+def instance_roles(forged_path, authentic_path, masks, thr=10):
+    """Papel dos pedacos de cada instancia, comparando a forjada com a autentica do mesmo case_id.
+
+    Pedaco quase igual a autentica (<10% dos pixels alterados) = origem; quase todo alterado (>90%) = destino.
+    Devolve uma linha por instancia, ou None se as duas imagens tem tamanhos diferentes.
+    """
+    f, a = load_image(forged_path), load_image(authentic_path)
+    if f.shape != a.shape:
+        return None
+    changed = np.abs(f.astype(int) - a.astype(int)).max(2) > thr
+    rows = []
+    for k, m in enumerate(masks):
+        ps = pieces(m)
+        altered = [changed[p].mean() for p, _, _ in ps]
+        areas = [area for _, area, _ in ps]
+        rows.append({"instancia": k, "n_pedacos": len(ps),
+                     "origens": sum(x < 0.1 for x in altered), "destinos": sum(x > 0.9 for x in altered),
+                     "frac_alterada": changed[m].mean(),
+                     "menor_sobre_maior": min(areas) / max(areas) if areas else np.nan})
+    return rows
+
+
+def roles_overlay(forged, authentic, mask, thr=10, alpha=0.55):
+    """Pinta a instancia: azul onde a forjada e igual a autentica (origem), vermelho onde mudou (destino)."""
+    changed = np.abs(forged.astype(int) - authentic.astype(int)).max(2) > thr
+    out = forged.astype(float).copy()
+    out[mask & ~changed] = (1 - alpha) * out[mask & ~changed] + alpha * np.array([0, 120, 255])
+    out[mask & changed] = (1 - alpha) * out[mask & changed] + alpha * np.array([230, 30, 30])
+    return out.astype(np.uint8)
 
 
 # ---------------------------------------------------------------- autocorrespondencia SIFT
